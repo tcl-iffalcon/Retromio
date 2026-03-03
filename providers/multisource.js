@@ -1,17 +1,7 @@
 /**
  * Retromio Provider for Nuvio TV
- * Vidlink + 4KHDHub — paralel
+ * Vidlink + NetMirror — paralel
  */
-"use strict";
-
-var __async = function(__this, __arguments, generator) {
-  return new Promise(function(resolve, reject) {
-    var fulfilled = function(value) { try { step(generator.next(value)); } catch(e) { reject(e); } };
-    var rejected  = function(value) { try { step(generator.throw(value)); } catch(e) { reject(e); } };
-    var step = function(x) { return x.done ? resolve(x.value) : Promise.resolve(x.value).then(fulfilled, rejected); };
-    step((generator = generator.apply(__this, __arguments)).next());
-  });
-};
 
 // ═══════════════════════════════════════════════════════════
 //  VIDLINK
@@ -53,188 +43,168 @@ function fetchVidlink(tmdbId, mediaType, season, episode) {
 }
 
 // ═══════════════════════════════════════════════════════════
-//  4KHDHUB
+//  NETMIRROR
 // ═══════════════════════════════════════════════════════════
-var HUB_BASE     = "https://4khdhub.fans";
-var HUB_UA       = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36";
-var HUB_TMDB_KEY = "439c478a771f35c05022f9feabcca01c";
-var cheerio      = require("cheerio-without-node-native");
+var NM_BASE    = "https://net22.cc";
+var NM_PLAY    = "https://net52.cc";
+var NM_TMDB    = "439c478a771f35c05022f9feabcca01c";
+var NM_HEADERS = {
+  "X-Requested-With": "XMLHttpRequest",
+  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+  "Accept": "application/json, text/plain, */*",
+  "Accept-Language": "en-US,en;q=0.5",
+  "Connection": "keep-alive"
+};
+var nmCookie = "";
+var nmCookieTime = 0;
 
-function hubFetchText(url, options) {
-  return __async(this, null, function*() {
-    try {
-      var res = yield fetch(url, { headers: Object.assign({ "User-Agent": HUB_UA }, (options && options.headers) || {}) });
-      return yield res.text();
-    } catch(e) { console.log("[4KHDHub] fetch fail:", e.message); return null; }
-  });
-}
+function nmTime() { return Math.floor(Date.now() / 1e3); }
 
-function hubAtob(input) {
-  var chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
-  var str = String(input).replace(/=+$/, "");
-  var output = "";
-  for (var bc = 0, bs, buffer, i = 0; buffer = str.charAt(i++); ~buffer && (bs = bc % 4 ? bs * 64 + buffer : buffer, bc++ % 4) ? output += String.fromCharCode(255 & bs >> (-2 * bc & 6)) : 0) {
-    buffer = chars.indexOf(buffer);
-  }
-  return output;
-}
+function nmBypass() {
+  if (nmCookie && Date.now() - nmCookieTime < 54e6) return Promise.resolve(nmCookie);
 
-function hubRot13(str) {
-  return str.replace(/[a-zA-Z]/g, function(c) {
-    return String.fromCharCode((c <= "Z" ? 90 : 122) >= (c = c.charCodeAt(0) + 13) ? c : c - 26);
-  });
-}
-
-function hubLevenshtein(s, t) {
-  if (s === t) return 0;
-  var n = s.length, m = t.length;
-  if (!n) return m; if (!m) return n;
-  var d = [];
-  for (var i = 0; i <= n; i++) { d[i] = []; d[i][0] = i; }
-  for (var j = 0; j <= m; j++) d[0][j] = j;
-  for (var i = 1; i <= n; i++) for (var j = 1; j <= m; j++) {
-    var cost = s.charAt(i-1) === t.charAt(j-1) ? 0 : 1;
-    d[i][j] = Math.min(d[i-1][j]+1, d[i][j-1]+1, d[i-1][j-1]+cost);
-  }
-  return d[n][m];
-}
-
-function hubParseBytes(val) {
-  if (typeof val === "number") return val;
-  if (!val) return 0;
-  var match = val.match(/^([0-9.]+)\s*([a-zA-Z]+)$/);
-  if (!match) return 0;
-  var num = parseFloat(match[1]), unit = match[2].toLowerCase();
-  var m = unit[0] === "k" ? 1024 : unit[0] === "m" ? 1024*1024 : unit[0] === "g" ? 1024*1024*1024 : 1;
-  return num * m;
-}
-
-function hubFormatBytes(val) {
-  if (!val) return "0 B";
-  var k = 1024, sizes = ["B","KB","MB","GB","TB"];
-  var i = Math.max(0, Math.floor(Math.log(val) / Math.log(k)));
-  return parseFloat((val / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
-}
-
-function hubGetTmdb(tmdbId, type) {
-  return __async(this, null, function*() {
-    var ep = type === "tv" ? "tv" : "movie";
-    var res = yield fetch("https://api.themoviedb.org/3/" + ep + "/" + tmdbId + "?api_key=" + HUB_TMDB_KEY);
-    var data = yield res.json();
-    return {
-      title: data.title || data.name,
-      year: parseInt((data.release_date || data.first_air_date || "0").split("-")[0])
-    };
-  });
-}
-
-function hubResolveRedirect(url) {
-  return __async(this, null, function*() {
-    var html = yield hubFetchText(url);
-    if (!html) return null;
-    try {
-      var m = html.match(/'o','(.*?)'/);
-      if (!m) return null;
-      return hubAtob(JSON.parse(hubAtob(hubRot13(hubAtob(hubAtob(m[1]))))).o);
-    } catch(e) { return null; }
-  });
-}
-
-function hubExtractHubCloud(hubUrl, meta) {
-  return __async(this, null, function*() {
-    if (!hubUrl) return [];
-    var html = yield hubFetchText(hubUrl, { headers: { Referer: hubUrl } });
-    if (!html) return [];
-    var m = html.match(/var url ?= ?'(.*?)'/);
-    if (!m) return [];
-    var linksHtml = yield hubFetchText(m[1], { headers: { Referer: hubUrl } });
-    if (!linksHtml) return [];
-    var $ = cheerio.load(linksHtml);
-    var results = [];
-    var size = $("#size").text(), title2 = $("title").text().trim();
-    var newMeta = Object.assign({}, meta, { bytes: hubParseBytes(size) || meta.bytes, title: title2 || meta.title });
-    $("a").each(function(_, el) {
-      var text = $(el).text(), href = $(el).attr("href");
-      if (!href) return;
-      if (text.includes("FSL") || text.includes("Download File")) results.push({ source: "FSL", url: href, meta: newMeta });
-      else if (text.includes("PixelServer")) results.push({ source: "PixelServer", url: href.replace("/u/","/api/file/"), meta: newMeta });
-    });
-    return results;
-  });
-}
-
-function hubExtractItem($, el) {
-  return __async(this, null, function*() {
-    var html2 = $(el).html();
-    var sizeM = html2.match(/([\d.]+ ?[GM]B)/);
-    var heightM = html2.match(/\d{3,}p/);
-    var title2 = $(el).find(".file-title, .episode-file-title").text().trim();
-    var height = heightM ? parseInt(heightM[0]) : 0;
-    if (!height && (title2.includes("4K") || html2.includes("4K"))) height = 2160;
-    var meta = { bytes: sizeM ? hubParseBytes(sizeM[1]) : 0, height: height, title: title2 };
-    var hubLink = $(el).find("a").filter(function(_,a){ return $(a).text().includes("HubCloud"); }).attr("href");
-    if (hubLink) { var resolved = yield hubResolveRedirect(hubLink); return { url: resolved, meta: meta }; }
-    return null;
-  });
-}
-
-function fetchHubStream(tmdbId, type, season, episode) {
-  return __async(this, null, function*() {
-    var details = yield hubGetTmdb(tmdbId, type);
-    if (!details || !details.title) return [];
-    var isSeries = type === "tv";
-    var searchUrl = HUB_BASE + "/?s=" + encodeURIComponent(details.title + " " + details.year);
-    var html = yield hubFetchText(searchUrl);
-    if (!html) return [];
-    var $ = cheerio.load(html);
-    var targetType = isSeries ? "Series" : "Movies";
-    var cards = $(".movie-card").filter(function(_,el) {
-      return $(el).find('.movie-card-format:contains("' + targetType + '")').length > 0;
-    }).filter(function(_,el) {
-      return Math.abs(parseInt($(el).find(".movie-card-meta").text()) - details.year) <= 1;
-    }).filter(function(_,el) {
-      return hubLevenshtein($(el).find(".movie-card-title").text().replace(/\[.*?]/g,"").trim().toLowerCase(), details.title.toLowerCase()) < 5;
-    }).map(function(_,el) {
-      var href = $(el).attr("href");
-      return href && !href.startsWith("http") ? HUB_BASE + (href.startsWith("/") ? "" : "/") + href : href;
-    }).get();
-    if (!cards.length) return [];
-    var pageHtml = yield hubFetchText(cards[0]);
-    if (!pageHtml) return [];
-    var $2 = cheerio.load(pageHtml);
-    var items = [];
-    if (isSeries && season && episode) {
-      var sStr = "S" + String(season).padStart(2,"0");
-      var eStr = "Episode-" + String(episode).padStart(2,"0");
-      $2(".episode-item").each(function(_,el) {
-        if ($2(".episode-title",el).text().includes(sStr)) {
-          $2(".episode-download-item",el).filter(function(_,it){ return $2(it).text().includes(eStr); }).each(function(_,it){ items.push(it); });
-        }
+  function attempt(n) {
+    if (n >= 5) return Promise.reject(new Error("bypass failed"));
+    return fetch(NM_PLAY + "/tv/p.php", { method: "POST", headers: NM_HEADERS })
+      .then(function(res) {
+        var setCookie = res.headers.get("set-cookie") || "";
+        var m = setCookie.match(/t_hash_t=([^;]+)/);
+        var cookie = m ? m[1] : null;
+        return res.text().then(function(txt) {
+          if (!txt.includes('"r":"n"')) return attempt(n + 1);
+          if (!cookie) return attempt(n + 1);
+          nmCookie = cookie;
+          nmCookieTime = Date.now();
+          return nmCookie;
+        });
       });
-    } else {
-      $2(".download-item").each(function(_,el){ items.push(el); });
-    }
-    var allStreams = [];
-    for (var i = 0; i < items.length; i++) {
-      try {
-        var src = yield hubExtractItem($2, items[i]);
-        if (src && src.url) {
-          var links = yield hubExtractHubCloud(src.url, src.meta);
-          links.forEach(function(link) {
-            allStreams.push({
-              name: "Retromio",
-              title: "4KHDHub · " + link.source + (src.meta.height ? " " + src.meta.height + "p" : ""),
-              url: link.url,
-              quality: src.meta.height ? src.meta.height + "p" : undefined,
-              size: hubFormatBytes(link.meta.bytes || 0)
+  }
+  return attempt(0);
+}
+
+function nmSearch(query, platform, cookie) {
+  var ott = platform === "primevideo" ? "pv" : platform === "disney" ? "hs" : "nf";
+  var endpoints = { netflix: NM_BASE + "/search.php", primevideo: NM_BASE + "/pv/search.php", disney: NM_BASE + "/mobile/hs/search.php" };
+  var url = (endpoints[platform] || endpoints.netflix) + "?s=" + encodeURIComponent(query) + "&t=" + nmTime();
+  var cookieStr = "t_hash_t=" + cookie + "; user_token=233123f803cf02184bf6c67e149cdd50; hd=on; ott=" + ott;
+
+  return fetch(url, { headers: Object.assign({}, NM_HEADERS, { "Cookie": cookieStr, "Referer": NM_BASE + "/tv/home" }) })
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+      return (data.searchResult || []).map(function(item) { return { id: item.id, title: item.t }; });
+    })
+    .catch(function() { return []; });
+}
+
+function nmGetToken(id, cookie, ott) {
+  var cookieStr = "t_hash_t=" + cookie + "; ott=" + (ott || "nf") + "; hd=on";
+  return fetch(NM_BASE + "/play.php", {
+    method: "POST",
+    headers: Object.assign({}, NM_HEADERS, { "Content-Type": "application/x-www-form-urlencoded", "Cookie": cookieStr, "Referer": NM_BASE + "/" }),
+    body: "id=" + id
+  })
+  .then(function(res) { return res.json(); })
+  .then(function(data) {
+    return fetch(NM_PLAY + "/play.php?id=" + id + "&" + data.h, {
+      headers: Object.assign({}, NM_HEADERS, { "Cookie": cookieStr })
+    });
+  })
+  .then(function(res) { return res.text(); })
+  .then(function(html) {
+    var m = html.match(/data-h="([^"]+)"/);
+    return m ? m[1] : null;
+  });
+}
+
+function nmGetStreams(id, title, platform, cookie) {
+  var ott = platform === "primevideo" ? "pv" : platform === "disney" ? "hs" : "nf";
+  var cookieStr = "t_hash_t=" + cookie + "; ott=" + ott + "; hd=on";
+  var endpoints = { netflix: NM_PLAY + "/playlist.php", primevideo: NM_PLAY + "/pv/playlist.php", disney: NM_PLAY + "/mobile/hs/playlist.php" };
+  var playlistUrl = endpoints[platform] || endpoints.netflix;
+
+  return nmGetToken(id, cookie, ott)
+    .then(function(token) {
+      if (!token) throw new Error("no token");
+      return fetch(playlistUrl + "?id=" + id + "&t=" + encodeURIComponent(title) + "&tm=" + nmTime() + "&h=" + token, {
+        headers: Object.assign({}, NM_HEADERS, { "Cookie": cookieStr, "Referer": NM_PLAY + "/" })
+      });
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(playlist) {
+      if (!Array.isArray(playlist) || !playlist.length) return [];
+      var sources = [];
+      playlist.forEach(function(item) {
+        (item.sources || []).forEach(function(src) {
+          var url = src.file;
+          if (url && url.startsWith("/")) url = NM_PLAY + "/" + url.replace(/^\//, "");
+          sources.push({
+            name: "Retromio",
+            title: "NetMirror · " + (src.label || "Auto"),
+            url: url,
+            quality: (src.label || "Auto").replace(/[^0-9p]/gi, "") || "Auto",
+            headers: { "User-Agent": "Mozilla/5.0 (Android) ExoPlayer", "Referer": NM_PLAY + "/", "Cookie": "hd=on" }
+          });
+        });
+      });
+      return sources;
+    })
+    .catch(function() { return []; });
+}
+
+function nmGetEpisodeId(contentId, platform, cookie, season, episode) {
+  var ott = platform === "primevideo" ? "pv" : platform === "disney" ? "hs" : "nf";
+  var cookieStr = "t_hash_t=" + cookie + "; user_token=233123f803cf02184bf6c67e149cdd50; ott=" + ott + "; hd=on";
+  var endpoints = { netflix: NM_BASE + "/post.php", primevideo: NM_BASE + "/pv/post.php", disney: NM_BASE + "/mobile/hs/post.php" };
+  var url = (endpoints[platform] || endpoints.netflix) + "?id=" + contentId + "&t=" + nmTime();
+
+  return fetch(url, { headers: Object.assign({}, NM_HEADERS, { "Cookie": cookieStr, "Referer": NM_BASE + "/tv/home" }) })
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+      var eps = (data.episodes || []).filter(Boolean);
+      var ep = eps.find(function(e) {
+        var s = parseInt((e.s || e.season || "").toString().replace("S",""));
+        var n = parseInt((e.ep || e.episode || "").toString().replace("E",""));
+        return s === season && n === episode;
+      });
+      return ep ? ep.id : null;
+    })
+    .catch(function() { return null; });
+}
+
+function fetchNetmirror(tmdbId, mediaType, season, episode, title) {
+  var platforms = ["netflix", "primevideo", "disney"];
+
+  function tryPlatform(i) {
+    if (i >= platforms.length) return Promise.resolve([]);
+    var platform = platforms[i];
+
+    return nmBypass()
+      .then(function(cookie) {
+        return nmSearch(title, platform, cookie)
+          .then(function(results) {
+            if (!results.length) return tryPlatform(i + 1);
+
+            var match = results.find(function(r) {
+              return r.title.toLowerCase().includes(title.toLowerCase().split(" ")[0]);
+            }) || results[0];
+
+            var contentIdPromise;
+            if (mediaType === "tv") {
+              contentIdPromise = nmGetEpisodeId(match.id, platform, cookie, season, episode);
+            } else {
+              contentIdPromise = Promise.resolve(match.id);
+            }
+
+            return contentIdPromise.then(function(contentId) {
+              if (!contentId) return tryPlatform(i + 1);
+              return nmGetStreams(contentId, title, platform, cookie);
             });
           });
-        }
-      } catch(e) { console.log("[4KHDHub] item err:", e.message); }
-    }
-    console.log("[Retromio] 4KHDHub:", allStreams.length);
-    return allStreams;
-  });
+      })
+      .catch(function() { return tryPlatform(i + 1); });
+  }
+
+  return tryPlatform(0);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -242,15 +212,29 @@ function fetchHubStream(tmdbId, type, season, episode) {
 // ═══════════════════════════════════════════════════════════
 function getStreams(tmdbId, mediaType, season, episode) {
   console.log("[Retromio] Fetching:", mediaType, tmdbId, season, episode);
-  var s = season || 1, e = episode || 1;
-  return Promise.all([
-    fetchVidlink(tmdbId, mediaType, s, e),
-    fetchHubStream(tmdbId, mediaType, s, e)
-  ]).then(function(results) {
-    var all = results[0].concat(results[1]);
-    console.log("[Retromio] Toplam:", all.length);
-    return all;
-  });
+  var s = season || 1;
+  var e = episode || 1;
+
+  // Önce TMDB'den başlık al (NetMirror için lazım)
+  return fetch("https://api.themoviedb.org/3/" + (mediaType === "tv" ? "tv" : "movie") + "/" + tmdbId + "?api_key=" + NM_TMDB)
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+      var title = data.title || data.name || "";
+
+      return Promise.all([
+        fetchVidlink(tmdbId, mediaType, s, e),
+        title ? fetchNetmirror(tmdbId, mediaType, s, e, title) : Promise.resolve([])
+      ]);
+    })
+    .then(function(results) {
+      var all = results[0].concat(results[1]);
+      console.log("[Retromio] Toplam:", all.length);
+      return all;
+    })
+    .catch(function(err) {
+      console.error("[Retromio] Ana hata:", err.message);
+      return fetchVidlink(tmdbId, mediaType, s, e);
+    });
 }
 
 module.exports = { getStreams };
