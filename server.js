@@ -140,11 +140,11 @@ async function generateWithFal(title, year, type) {
   const FAL_KEY = process.env.FAL_API_KEY;
   if (!FAL_KEY) throw new Error("FAL_API_KEY not set");
 
-  const prompt = `alternative movie poster illustration, bold black ink outlines, flat colors, limited palette yellow red black white cream, screen print style, retro typography, graphic novel aesthetic, no photorealism, portrait orientation, title text: "${title}"${year ? ` (${year})` : ""}, ${type === "series" ? "TV series" : "film"}`;
+  const prompt = `vintage alternative movie poster illustration, bold black ink outlines, flat colors, limited palette yellow red black white, collage of multiple characters, screen print style, Joshua Budich art style, retro typography at bottom, no photorealism, graphic novel aesthetic, portrait orientation, title: "${title}"${year ? ` (${year})` : ""}, ${type === "series" ? "TV series" : "film"}`;
 
   activeRequests++;
   try {
-    const falRes = await fetch("https://fal.run/fal-ai/flux/schnell", {
+    const falRes = await fetch("https://fal.run/fal-ai/flux/dev", {
       method: "POST",
       headers: {
         "Authorization": `Key ${FAL_KEY}`,
@@ -152,8 +152,9 @@ async function generateWithFal(title, year, type) {
       },
       body: JSON.stringify({
         prompt,
-        image_size: { width: 400, height: 600 },
-        num_inference_steps: 4,
+        image_size: { width: 512, height: 768 },
+        num_inference_steps: 28,
+        guidance_scale: 3.5,
         num_images: 1,
         enable_safety_checker: false
       })
