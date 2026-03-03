@@ -1,32 +1,49 @@
 {
-  "name": "Retromio Repo",
+  "id": "com.retromio.addon",
   "version": "1.0.0",
-  "scrapers": [
+  "name": "Retromio",
+  "description": "Retro-styled movie & series catalog with Vidlink and NetMirror streams",
+  "logo": "https://img.icons8.com/fluency/96/retro-tv.png",
+  "background": "https://img.icons8.com/fluency/512/retro-tv.png",
+  "resources": ["catalog", "meta", "stream"],
+  "types": ["movie", "series"],
+  "idPrefixes": ["tt", "tmdb:"],
+  "catalogs": [
     {
-      "id": "retromio-vidlink",
-      "name": "Retromio Vidlink",
-      "description": "Vidlink kaynağı",
-      "version": "1.0.0",
-      "author": "tcl-iffalcon",
-      "supportedTypes": ["movie", "tv"],
-      "filename": "providers/vidlink.js",
-      "enabled": true,
-      "logo": "https://img.icons8.com/fluency/96/retro-tv.png",
-      "contentLanguage": ["en"],
-      "formats": ["m3u8", "mp4"]
+      "type": "movie",
+      "id": "retromio_trending_movies",
+      "name": "Retromio Trending",
+      "extra": [
+        { "name": "skip", "isRequired": false }
+      ]
     },
     {
-      "id": "retromio-netmirror",
-      "name": "Retromio NetMirror",
-      "description": "Netflix, Prime, Disney içerikleri",
-      "version": "1.0.0",
-      "author": "tcl-iffalcon",
-      "supportedTypes": ["movie", "tv"],
-      "filename": "providers/netmirror.js",
-      "enabled": true,
-      "logo": "https://img.icons8.com/fluency/96/retro-tv.png",
-      "contentLanguage": ["en"],
-      "formats": ["m3u8"]
+      "type": "movie",
+      "id": "retromio_popular_movies",
+      "name": "Retromio Popular",
+      "extra": [
+        { "name": "skip", "isRequired": false }
+      ]
     },
-  ]
+    {
+      "type": "series",
+      "id": "retromio_trending_series",
+      "name": "Retromio Trending",
+      "extra": [
+        { "name": "skip", "isRequired": false }
+      ]
+    },
+    {
+      "type": "series",
+      "id": "retromio_popular_series",
+      "name": "Retromio Popular",
+      "extra": [
+        { "name": "skip", "isRequired": false }
+      ]
+    }
+  ],
+  "behaviorHints": {
+    "configurable": true,
+    "configurationRequired": false
+  }
 }
