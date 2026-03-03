@@ -1,0 +1,17 @@
+[
+  {
+    "id": "multisource",
+    "name": "Multi-Source (VidSrc + VixSrc + CineHDPlus + 4KHDHub)",
+    "description": "4 kaynaktan paralel stream çeken Nuvio provider'ı",
+    "version": "1.0.0",
+    "author": "sen",
+    "supportedTypes": ["movie", "tv"],
+    "filename": "providers/multisource.js",
+    "enabled": true,
+    "logo": "https://img.icons8.com/fluency/96/play-button-circled.png",
+    "contentLanguage": ["en", "tr"],
+    "formats": ["m3u8", "mp4"],
+    "limited": false,
+    "supportsExternalPlayer": true
+  }
+]
