@@ -42,25 +42,27 @@ function tmdbToStremio(item, type, baseUrl) {
 }
 
 async function fetchCatalog(catalogId, type, skip = 0, baseUrl) {
-  const page = Math.floor(skip / 20) + 1;
-  let endpoint;
+  // TMDB returns 20 per page, fetch multiple pages to fill 100 results
+  const startPage = Math.floor(skip / 100) * 5 + 1;
+  const tmdbType = type === "series" ? "tv" : "movie";
+  const isTrending = catalogId.includes("trending");
 
-  if (catalogId.includes("trending")) {
-    endpoint = `${TMDB_BASE}/trending/${type === "series" ? "tv" : "movie"}/week?api_key=${TMDB_API_KEY}&page=${page}`;
-  } else {
-    endpoint = `${TMDB_BASE}/${type === "series" ? "tv" : "movie"}/popular?api_key=${TMDB_API_KEY}&page=${page}`;
+  const pagePromises = [];
+  for (let p = startPage; p < startPage + 5; p++) {
+    const endpoint = isTrending
+      ? `${TMDB_BASE}/trending/${tmdbType}/week?api_key=${TMDB_API_KEY}&page=${p}`
+      : `${TMDB_BASE}/${tmdbType}/popular?api_key=${TMDB_API_KEY}&page=${p}`;
+    pagePromises.push(fetch(endpoint).then(r => r.json()));
   }
 
-  console.log(`[Catalog] Fetching: ${endpoint}`);
-  const res = await fetch(endpoint);
-  const data = await res.json();
+  const pages = await Promise.all(pagePromises);
+  const allResults = pages.flatMap(data => data.results || []);
 
-  if (!data.results) return [];
-
-  const metas = data.results
+  const metas = allResults
     .filter(item => item.poster_path)
-    .map(item => tmdbToStremio(item, type === "series" ? "tv" : "movie", baseUrl));
+    .map(item => tmdbToStremio(item, tmdbType, baseUrl));
 
+  console.log(`[Catalog] ${catalogId} skip=${skip} → ${metas.length} results`);
   return metas;
 }
 
