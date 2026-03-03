@@ -107,7 +107,7 @@ const MAX_CONCURRENT = 2;   // fal.ai free tier limit is 2 concurrent
 const requestQueue = [];
 
 // ── Cache version: bump this to invalidate all stored posters ────────────────
-const POSTER_VERSION = "v7";
+const POSTER_VERSION = "v9";
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -144,36 +144,72 @@ async function uploadToB2(key, buffer) {
   }));
 }
 
-async function generateWithFal(title, year, type) {
-  // Style pool — picked deterministically per title for consistency
-  const styles = [
-    `1950s pulp fiction painted movie poster, dramatic oil painting, rich saturated reds oranges yellows, moody noir shadows, detailed expressive faces, action composition, bold vintage serif title at bottom`,
-    `classic Hollywood golden age 1940s painted movie poster, warm amber crimson ivory palette, glamorous characters, dramatic lighting, art deco typography, cinematic grandeur`,
-    `1960s Italian spaghetti western cinema poster, painterly illustration, vivid earthy tones, intense close-up faces, dust and drama, bold condensed title typography`,
-    `1970s grindhouse exploitation painted poster, high contrast deep colors, gritty urban scene, intense action, worn texture, large bold retro title, illustrated not photographic`,
-    `vintage 1950s pulp magazine adventure cover, richly painted illustration, vivid blues reds golds, heroic figures in dynamic pose, retro typography, painted not CGI`
-  ];
+// TMDB genre ID → genre name map
+const GENRE_MAP = {
+  28: "action", 12: "adventure", 16: "animation", 35: "comedy",
+  80: "crime", 99: "documentary", 18: "drama", 10751: "family",
+  14: "fantasy", 36: "history", 27: "horror", 10402: "music",
+  9648: "mystery", 10749: "romance", 878: "science fiction",
+  10770: "tv movie", 53: "thriller", 10752: "war", 37: "western",
+  10759: "action & adventure", 10762: "kids", 10763: "news",
+  10764: "reality", 10765: "sci-fi & fantasy", 10766: "soap",
+  10767: "talk", 10768: "war & politics"
+};
 
-  const styleIndex = Math.abs([...(title || "x")].reduce((a, c) => a + c.charCodeAt(0), 0)) % styles.length;
-  const chosenStyle = styles[styleIndex];
+function buildPrompt(title, year, type, genreIds, overview) {
+  const ids = (genreIds || "").split(",").map(Number).filter(Boolean);
+  const genreNames = ids.map(id => GENRE_MAP[id]).filter(Boolean);
+  const primaryGenre = genreNames[0] || "drama";
+
+  // Genre-aware style selection
+  const genreStyles = {
+    horror: `terrifying 1970s horror movie poster, dark gothic atmosphere, deep crimson black shadows, menacing figures, dripping paint texture, screaming bold title, painted illustration`,
+    thriller: `1960s psychological thriller painted poster, cold blue grey palette, tense shadowy figures, paranoid atmosphere, stark contrast, bold condensed title`,
+    "science fiction": `retro 1950s sci-fi painted movie poster, deep space blues purples, futuristic characters and technology, dramatic cosmic scene, bold retro-futurist typography`,
+    "sci-fi & fantasy": `retro 1950s sci-fi painted movie poster, deep space blues purples, futuristic characters and technology, dramatic cosmic scene, bold retro-futurist typography`,
+    action: `explosive 1980s action movie painted poster, intense orange red fiery palette, heroic muscular figures, dramatic explosion background, bold aggressive title typography`,
+    "action & adventure": `explosive 1980s action movie painted poster, intense orange red fiery palette, heroic figures in combat, dramatic scene, bold aggressive title typography`,
+    adventure: `classic 1950s adventure painted movie poster, rich jungle greens golden yellows, heroic explorer figures, exotic dramatic scene, bold adventurous title`,
+    romance: `elegant 1940s romantic painted movie poster, soft warm rose gold ivory palette, glamorous couple, dreamy atmosphere, flowing art nouveau typography`,
+    comedy: `fun vintage 1960s comedy painted movie poster, bright cheerful warm palette, expressive comedic characters, playful scene, bold colorful title`,
+    animation: `vintage 1950s illustrated movie poster, vibrant jewel tone colors, whimsical characters, magical scene, bold playful retro title typography`,
+    fantasy: `epic fantasy painted movie poster, deep jewel tones purple gold emerald, mythical characters and creatures, grand dramatic scene, ornate fantasy typography`,
+    crime: `1940s film noir painted movie poster, dramatic high contrast, deep blacks cool blues, shadowy detective figures, smoky atmosphere, classic noir typography`,
+    drama: `classic Hollywood 1950s painted drama poster, warm amber crimson cream palette, expressive emotional characters, intimate cinematic scene, elegant serif title`,
+    war: `powerful 1940s war painted movie poster, muted olive grey brown palette, soldiers in dramatic battle scene, gritty atmosphere, bold patriotic typography`,
+    western: `classic 1960s western painted movie poster, warm dusty desert palette, lone cowboy silhouette, dramatic sunset, bold slab serif title typography`,
+    history: `epic historical painted movie poster, rich earthy tones gold bronze, period-accurate costumes and setting, grand dramatic composition, classical typography`,
+    mystery: `atmospheric 1950s mystery painted poster, moody blue purple shadows, mysterious figure in fog, suspenseful composition, elegant serif title`,
+    family: `warm vintage 1950s family adventure poster, bright cheerful palette, wholesome characters in exciting scene, friendly retro typography`
+  };
+
+  const style = genreStyles[primaryGenre] || `classic 1950s Hollywood painted movie poster, rich warm palette, dramatic characters, cinematic composition, bold vintage typography`;
+
+  const plotHint = overview ? overview.substring(0, 120) : "";
 
   const prompt = [
-    chosenStyle,
+    style,
     `movie poster for the ${type === "series" ? "TV series" : "film"} "${title}"${year ? ` (${year})` : ""}`,
-    `portrait orientation 2:3 ratio`,
-    `highly detailed hand-painted illustration style`,
+    plotHint ? `scene inspired by: ${plotHint}` : "",
+    `portrait orientation 2:3`,
+    `highly detailed hand-painted illustration`,
     `dramatic cinematic composition with characters`,
-    `vintage tagline text at bottom`,
-    `professional movie poster layout`,
-    `no photorealism, no CGI look, no modern digital art aesthetic`,
-    `rich deep colors, strong contrast, painterly texture`
-  ].join(", ");
+    `vintage tagline at bottom`,
+    `professional vintage movie poster layout`,
+    `NOT flat design, NOT yellow background, NOT minimalist, NOT comic book flat outline`,
+    `rich deep colors, strong cinematic contrast, painterly oil texture`
+  ].filter(Boolean).join(", ");
+
+  return { prompt, styleLabel: primaryGenre };
+}
+
+async function generateWithFal(title, year, type, genreIds, overview) {
+  const { prompt, styleLabel } = buildPrompt(title, year, type, genreIds, overview);
 
   const seed = Math.abs([...(title || "x")].reduce((a, c) => a + c.charCodeAt(0), 0));
-
   activeRequests++;
   try {
-    console.log(`[AI Poster] fal.ai flux/schnell request: "${title}" (style ${styleIndex})`);
+    console.log(`[AI Poster] fal.ai flux/schnell request: "${title}" (genre: ${styleLabel})`);
 
     // Use direct run endpoint (sync) — simpler and more reliable than queue
     const runRes = await fetch("https://fal.run/fal-ai/flux/schnell", {
@@ -221,7 +257,7 @@ async function prewarmPoster(title, year, type) {
   const promise = new Promise((resolve, reject) => {
     const task = async () => {
       try {
-        const buf = await generateWithFal(title, year, type);
+        const buf = await generateWithFal(title, year, type, genres, overview);
         await uploadToB2(key, buf);
         console.log(`[AI Poster] Stored in B2: ${key}`);
         resolve();
@@ -240,7 +276,7 @@ async function prewarmPoster(title, year, type) {
 }
 
 app.get("/ai-poster", async (req, res) => {
-  const { title, year, type } = req.query;
+  const { title, year, type, genres, overview } = req.query;
   const fallback = req.query.fallback;
 
   if (!title) {
@@ -277,7 +313,7 @@ app.get("/ai-poster", async (req, res) => {
   const promise = new Promise((resolve, reject) => {
     const task = async () => {
       try {
-        const buf = await generateWithFal(title, year, type);
+        const buf = await generateWithFal(title, year, type, genres, overview);
         await uploadToB2(key, buf);
         console.log(`[AI Poster] Done + stored: ${key}`);
         resolve();
