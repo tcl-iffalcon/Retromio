@@ -24,343 +24,100 @@ function getBaseUrl(req) {
 }
 
 function getUserConfig(req) {
-  const config = req.params.config;
-  if (!config) return { retro: false, ai: false, aiStyle: "pulp" };
-  try {
-    const parsed = JSON.parse(Buffer.from(config, "base64").toString("utf8"));
-    return { retro: false, ai: false, aiStyle: "pulp", ...parsed };
-  } catch {
-    return { retro: false, ai: false, aiStyle: "pulp" };
-  }
+  return {};
 }
 
 // ─── Configure Page ──────────────────────────────────────────────────────────
 
 app.get("/configure", (req, res) => {
   const baseUrl = getBaseUrl(req);
+  const manifestUrl = `${baseUrl}/manifest.json`;
+  const stremioUrl = manifestUrl.replace(/^https?:\/\//, "stremio://");
   res.send(`<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Retromio - Configure</title>
+  <title>Retromio</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      background: #0a0a0f;
-      color: #e8e0d5;
-      font-family: Georgia, serif;
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 2rem;
-    }
-    .container { max-width: 540px; width: 100%; }
-    .logo { text-align: center; margin-bottom: 2.5rem; }
-    .logo img { width: 72px; height: 72px; margin-bottom: 1rem; filter: sepia(0.3); }
-    h1 { font-size: 2rem; letter-spacing: .15em; text-transform: uppercase; color: #c9a84c; text-align: center; }
-    .tagline { text-align: center; color: #7a6e60; font-style: italic; margin-top: .4rem; font-size: .9rem; }
-    .card { background: #13131a; border: 1px solid #2a2520; border-radius: 8px; padding: 2rem; margin-top: 2rem; }
-    .section-label { font-size: .9rem; color: #c9a84c; margin-bottom: 1rem; display: block; letter-spacing: .05em; }
-    .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem; }
-    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; margin-bottom: 1.5rem; }
-    .opt {
-      border: 2px solid #2a2520;
-      border-radius: 6px;
-      padding: .85rem;
-      cursor: pointer;
-      text-align: center;
-      background: #0d0d12;
-      transition: border-color .2s;
-      user-select: none;
-    }
-    .opt:hover { border-color: #7a6a40; }
-    .opt.active { border-color: #c9a84c; background: #1a1508; }
-    .opt .preview {
-      width: 100%; aspect-ratio: 3/2;
-      border-radius: 4px; margin-bottom: .6rem;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 1.8rem; overflow: hidden;
-    }
-    .prev-orig { background: linear-gradient(135deg,#1a2a4a,#2a1a3a); }
-    .prev-retro { background: linear-gradient(135deg,#3d2b1f,#1f1a0f); filter: sepia(.8) contrast(1.1); }
-    .prev-ai { background: linear-gradient(135deg,#1a0a2e,#0a1a2e); }
-    .opt .name { font-size: .85rem; color: #e8e0d5; letter-spacing: .05em; }
-    .opt .desc { font-size: .72rem; color: #5a5248; margin-top: .2rem; }
-    #aiSection { display: none; }
-    .install-btn {
-      width: 100%; padding: 1rem;
-      background: #c9a84c; color: #0a0a0f;
-      border: none; border-radius: 6px;
-      font-size: 1rem; font-family: Georgia, serif;
-      font-weight: bold; letter-spacing: .1em;
-      text-transform: uppercase; cursor: pointer;
-      transition: background .2s;
-    }
-    .install-btn:hover { background: #e0bc5a; }
-    .install-url {
-      margin-top: 1rem; padding: .75rem 1rem;
-      background: #0d0d12; border: 1px solid #2a2520;
-      border-radius: 6px; font-size: .75rem; color: #7a6e60;
-      word-break: break-all; display: none;
-    }
-    .divider { border: none; border-top: 1px solid #2a2520; margin: 1.5rem 0; }
-    .providers { display: flex; gap: .75rem; justify-content: center; }
+    body { background: #0a0a0f; color: #e8e0d5; font-family: Georgia, serif; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 2rem; }
+    .container { max-width: 480px; width: 100%; text-align: center; }
+    img { width: 80px; margin-bottom: 1rem; filter: sepia(.3); }
+    h1 { font-size: 2rem; letter-spacing: .15em; text-transform: uppercase; color: #c9a84c; }
+    p { color: #7a6e60; font-style: italic; margin: .5rem 0 2rem; }
+    .card { background: #13131a; border: 1px solid #2a2520; border-radius: 8px; padding: 2rem; }
+    .desc { font-size: .9rem; color: #a09080; margin-bottom: 1.5rem; line-height: 1.6; }
+    .btn { display: block; width: 100%; padding: 1rem; background: #c9a84c; color: #0a0a0f; border: none; border-radius: 6px; font-size: 1rem; font-family: Georgia, serif; font-weight: bold; letter-spacing: .1em; text-transform: uppercase; cursor: pointer; text-decoration: none; margin-bottom: .75rem; }
+    .btn:hover { background: #e0bc5a; }
+    .url { padding: .75rem; background: #0d0d12; border: 1px solid #2a2520; border-radius: 6px; font-size: .75rem; color: #7a6e60; word-break: break-all; margin-top: .75rem; }
+    .badges { display: flex; gap: .5rem; justify-content: center; margin-top: 1.5rem; }
     .badge { padding: .3rem .75rem; border: 1px solid #2a2520; border-radius: 20px; font-size: .75rem; color: #7a6e60; }
-    .ai-note { font-size: .7rem; color: #5a5248; margin-top: .5rem; }
   </style>
 </head>
 <body>
   <div class="container">
-    <div class="logo">
-      <img src="https://img.icons8.com/fluency/96/retro-tv.png" alt="Retromio">
-      <h1>Retromio</h1>
-      <p class="tagline">Vintage cinema, modern streams</p>
-    </div>
+    <img src="https://img.icons8.com/fluency/96/retro-tv.png" alt="Retromio">
+    <h1>Retromio</h1>
+    <p>Vintage cinema, modern streams</p>
     <div class="card">
-      <span class="section-label">🎞 Poster Style</span>
-      <div class="grid3">
-        <div class="opt active" id="opt-original" onclick="pick('original')">
-          <div class="preview prev-orig">🎬</div>
-          <div class="name">Original</div>
-          <div class="desc">TMDB posters</div>
-        </div>
-        <div class="opt" id="opt-retro" onclick="pick('retro')">
-          <div class="preview prev-retro">🎞</div>
-          <div class="name">Retro Filter</div>
-          <div class="desc">Vintage aesthetic</div>
-        </div>
-        <div class="opt" id="opt-ai" onclick="pick('ai')">
-          <div class="preview prev-ai">✦</div>
-          <div class="name">AI Poster</div>
-          <div class="desc">Marquee-style art</div>
-        </div>
-      </div>
-
-      <div id="aiSection">
-        <span class="section-label">✦ AI Art Style</span>
-        <div class="grid2">
-          <div class="opt active" id="ai-pulp" onclick="pickAi('pulp')">
-            <div class="name">Pulp Fiction</div>
-            <div class="desc">1950s noir illustration</div>
-          </div>
-          <div class="opt" id="ai-comic" onclick="pickAi('comic')">
-            <div class="name">Comic Book</div>
-            <div class="desc">Bold ink, halftone</div>
-          </div>
-          <div class="opt" id="ai-soviet" onclick="pickAi('soviet')">
-            <div class="name">Constructivist</div>
-            <div class="desc">Soviet poster style</div>
-          </div>
-          <div class="opt" id="ai-neon" onclick="pickAi('neon')">
-            <div class="name">Synthwave</div>
-            <div class="desc">80s neon retro</div>
-          </div>
-        </div>
-        <p class="ai-note">⚠ İlk yüklemede 5-10 sn gecikme olabilir. Posterler 7 gün önbelleklenir.</p>
-      </div>
-
-      <button class="install-btn" onclick="install()">📺 Install to Stremio</button>
-      <div class="install-url" id="installUrl"></div>
-      <hr class="divider">
-      <div class="providers">
+      <p class="desc">AI-generated retro illustration posters for every movie &amp; series — comic book style, bold ink outlines, limited color palette.</p>
+      <a class="btn" href="${stremioUrl}">📺 Install to Stremio</a>
+      <div class="url">${manifestUrl}</div>
+      <div class="badges">
         <span class="badge">Vidlink</span>
         <span class="badge">NetMirror</span>
         <span class="badge">TMDB</span>
+        <span class="badge">AI Posters</span>
       </div>
     </div>
   </div>
-  <script>
-    var style = 'original';
-    var aiStyle = 'pulp';
-    var BASE = '${baseUrl}';
-
-    function pick(s) {
-      style = s;
-      ['original','retro','ai'].forEach(function(id) {
-        document.getElementById('opt-' + id).classList.remove('active');
-      });
-      document.getElementById('opt-' + s).classList.add('active');
-      document.getElementById('aiSection').style.display = s === 'ai' ? 'block' : 'none';
-    }
-
-    function pickAi(s) {
-      aiStyle = s;
-      ['pulp','comic','soviet','neon'].forEach(function(id) {
-        document.getElementById('ai-' + id).classList.remove('active');
-      });
-      document.getElementById('ai-' + s).classList.add('active');
-    }
-
-    function install() {
-      var config = { retro: style === 'retro', ai: style === 'ai', aiStyle: aiStyle };
-      var encoded = btoa(JSON.stringify(config));
-      var url = BASE + '/' + encoded + '/manifest.json';
-      var stremioUrl = 'stremio://' + url.replace(/^https?:\/\//, '');
-      var div = document.getElementById('installUrl');
-      div.style.display = 'block';
-      div.textContent = url;
-      window.location.href = stremioUrl;
-    }
-  </script>
 </body>
 </html>`);
 });
 // ─── Manifest ────────────────────────────────────────────────────────────────
 
 app.get("/:config/manifest.json", (req, res) => {
-  const config = getUserConfig(req);
-  const manifest = {
-    ...baseManifest,
-    name: config.retro ? "Retromio ✦ Retro" : "Retromio",
-    description: config.retro
-      ? "Vintage-styled catalog with Vidlink & NetMirror streams"
-      : "Modern catalog with Vidlink & NetMirror streams"
-  };
-  res.json(manifest);
+  res.json(baseManifest);
 });
 
 app.get("/manifest.json", (req, res) => {
   res.json(baseManifest);
 });
 
-// ─── AI Poster (Pollinations.AI) ─────────────────────────────────────────────
+// ─── AI Poster (Pollinations.AI — free, no key needed) ──────────────────────
 
 app.get("/ai-poster", async (req, res) => {
-  const { title, year, type, genres } = req.query;
-  if (!title) return res.status(400).send("Missing title param");
+  const { title, year, type } = req.query;
+  const fallback = req.query.fallback;
 
-  // Style presets — pick one via ?style=
-  const style = req.query.style || "pulp";
-  const stylePrompts = {
-    pulp:     "vintage 1950s pulp fiction movie poster illustration, dramatic composition, bold typography, aged paper texture, noir lighting",
-    comic:    "retro comic book cover art style, bold ink outlines, halftone dots, vibrant primary colors, action composition",
-    soviet:   "soviet constructivist propaganda poster style, geometric shapes, bold flat colors, strong diagonal composition",
-    woodcut:  "vintage woodcut print movie poster, black and white with one accent color, rough texture, expressionist style",
-    neon:     "1980s synthwave neon movie poster, glowing neon colors, chrome lettering, dark background, retrofuturistic",
-  };
+  if (!title) {
+    if (fallback) return res.redirect(fallback);
+    return res.status(400).send("Missing title");
+  }
 
-  const genreHint = genres ? `Genre: ${genres}.` : "";
-  const typeHint = type === "series" ? "TV series" : "film";
-  const prompt = `${stylePrompts[style] || stylePrompts.pulp}, title: "${title}" (${year || ""}), ${typeHint}. ${genreHint} No watermarks, portrait orientation, cinematic.`;
+  // Prompt tuned to match bold ink illustration / screen print style
+  const prompt = `alternative movie poster illustration art, bold black ink outlines, flat colors, limited palette yellow red black white cream, collage composition, screen print style, retro typography, graphic novel aesthetic, no photorealism, portrait orientation, title: "${title}"${year ? ` (${year})` : ""}, ${type === "series" ? "TV series" : "film"}`;
 
-  const encodedPrompt = encodeURIComponent(prompt);
-  const width = 400;
-  const height = 600;
-  const seed = Math.abs(title.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0)); // deterministic per title
+  const seed = Math.abs([...title].reduce((a, c) => a + c.charCodeAt(0), 0));
+  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=400&height=600&seed=${seed}&nologo=true&model=flux`;
 
-  const pollinationsUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${width}&height=${height}&seed=${seed}&nologo=true&model=flux`;
-
-  console.log(`[AI Poster] Generating: "${title}" style=${style}`);
+  console.log(`[AI Poster] Generating: "${title}" seed=${seed}`);
 
   try {
-    const response = await fetch(pollinationsUrl, { timeout: 30000 });
-    if (!response.ok) throw new Error(`Pollinations error: ${response.status}`);
-
+    const response = await fetch(url, { timeout: 30000 });
+    if (!response.ok) throw new Error(`Pollinations ${response.status}`);
     const buffer = await response.buffer();
-    const contentType = response.headers.get("content-type") || "image/jpeg";
-
-    res.set("Content-Type", contentType);
-    res.set("Cache-Control", "public, max-age=604800"); // cache 7 days
+    res.set("Content-Type", response.headers.get("content-type") || "image/jpeg");
+    res.set("Cache-Control", "public, max-age=604800");
     res.send(buffer);
   } catch (err) {
     console.error(`[AI Poster] Error: ${err.message}`);
-    // Fallback: redirect to original TMDB poster if provided
-    const fallback = req.query.fallback;
     if (fallback) return res.redirect(fallback);
-    res.status(500).send("AI poster generation failed");
+    res.status(500).send("Failed");
   }
 });
 
-// ─── Retro Poster Proxy ───────────────────────────────────────────────────────
-
-app.get("/poster", async (req, res) => {
-  const imgUrl = req.query.img;
-  if (!imgUrl) return res.status(400).send("Missing img param");
-
-  try {
-    const response = await fetch(imgUrl);
-    if (!response.ok) throw new Error("Image fetch failed");
-    const buffer = await response.buffer();
-    const contentType = response.headers.get("content-type") || "image/jpeg";
-
-    // Return SVG wrapper that applies retro filter over the image
-    const base64 = buffer.toString("base64");
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="500" height="750">
-  <defs>
-    <filter id="retro" color-interpolation-filters="sRGB">
-      <feColorMatrix type="saturate" values="0.55"/>
-      <feColorMatrix type="matrix" values="
-        1.1  0.1  0.05 0 0.02
-        0.05 0.95 0.05 0 0.01
-        0    0.05 0.8  0 0
-        0    0    0    1 0"/>
-      <feComponentTransfer>
-        <feFuncR type="gamma" amplitude="1" exponent="0.9" offset="0.03"/>
-        <feFuncG type="gamma" amplitude="1" exponent="0.95" offset="0.02"/>
-        <feFuncB type="gamma" amplitude="0.9" exponent="1.05" offset="0"/>
-      </feComponentTransfer>
-      <feBlend in="SourceGraphic" mode="multiply"/>
-    </filter>
-    <!-- Grain overlay -->
-    <filter id="grain">
-      <feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" stitchTiles="stitch"/>
-      <feColorMatrix type="saturate" values="0"/>
-      <feBlend in="SourceGraphic" mode="overlay" result="blend"/>
-      <feComposite in="blend" in2="SourceGraphic" operator="in"/>
-    </filter>
-  </defs>
-  <!-- Base image with retro color grading -->
-  <image href="data:${contentType};base64,${base64}" width="500" height="750" filter="url(#retro)"/>
-  <!-- Vignette overlay -->
-  <radialGradient id="vignette" cx="50%" cy="50%" r="70%">
-    <stop offset="60%" stop-color="transparent"/>
-    <stop offset="100%" stop-color="rgba(10,5,0,0.55)"/>
-  </radialGradient>
-  <rect width="500" height="750" fill="url(#vignette)"/>
-  <!-- Subtle warm overlay -->
-  <rect width="500" height="750" fill="rgba(80,40,0,0.08)"/>
-  <!-- Film strip top -->
-  <rect width="500" height="18" fill="rgba(0,0,0,0.7)"/>
-  <rect x="10" y="3" width="28" height="12" rx="2" fill="rgba(255,255,255,0.12)"/>
-  <rect x="46" y="3" width="28" height="12" rx="2" fill="rgba(255,255,255,0.12)"/>
-  <rect x="82" y="3" width="28" height="12" rx="2" fill="rgba(255,255,255,0.12)"/>
-  <rect x="118" y="3" width="28" height="12" rx="2" fill="rgba(255,255,255,0.12)"/>
-  <rect x="154" y="3" width="28" height="12" rx="2" fill="rgba(255,255,255,0.12)"/>
-  <rect x="190" y="3" width="28" height="12" rx="2" fill="rgba(255,255,255,0.12)"/>
-  <rect x="226" y="3" width="28" height="12" rx="2" fill="rgba(255,255,255,0.12)"/>
-  <rect x="262" y="3" width="28" height="12" rx="2" fill="rgba(255,255,255,0.12)"/>
-  <rect x="298" y="3" width="28" height="12" rx="2" fill="rgba(255,255,255,0.12)"/>
-  <rect x="334" y="3" width="28" height="12" rx="2" fill="rgba(255,255,255,0.12)"/>
-  <rect x="370" y="3" width="28" height="12" rx="2" fill="rgba(255,255,255,0.12)"/>
-  <rect x="406" y="3" width="28" height="12" rx="2" fill="rgba(255,255,255,0.12)"/>
-  <rect x="442" y="3" width="28" height="12" rx="2" fill="rgba(255,255,255,0.12)"/>
-  <!-- Film strip bottom -->
-  <rect y="732" width="500" height="18" fill="rgba(0,0,0,0.7)"/>
-  <rect x="10" y="735" width="28" height="12" rx="2" fill="rgba(255,255,255,0.12)"/>
-  <rect x="46" y="735" width="28" height="12" rx="2" fill="rgba(255,255,255,0.12)"/>
-  <rect x="82" y="735" width="28" height="12" rx="2" fill="rgba(255,255,255,0.12)"/>
-  <rect x="118" y="735" width="28" height="12" rx="2" fill="rgba(255,255,255,0.12)"/>
-  <rect x="154" y="735" width="28" height="12" rx="2" fill="rgba(255,255,255,0.12)"/>
-  <rect x="190" y="735" width="28" height="12" rx="2" fill="rgba(255,255,255,0.12)"/>
-  <rect x="226" y="735" width="28" height="12" rx="2" fill="rgba(255,255,255,0.12)"/>
-  <rect x="262" y="735" width="28" height="12" rx="2" fill="rgba(255,255,255,0.12)"/>
-  <rect x="298" y="735" width="28" height="12" rx="2" fill="rgba(255,255,255,0.12)"/>
-  <rect x="334" y="735" width="28" height="12" rx="2" fill="rgba(255,255,255,0.12)"/>
-  <rect x="370" y="735" width="28" height="12" rx="2" fill="rgba(255,255,255,0.12)"/>
-  <rect x="406" y="735" width="28" height="12" rx="2" fill="rgba(255,255,255,0.12)"/>
-  <rect x="442" y="735" width="28" height="12" rx="2" fill="rgba(255,255,255,0.12)"/>
-</svg>`;
-
-    res.set("Content-Type", "image/svg+xml");
-    res.set("Cache-Control", "public, max-age=86400");
-    res.send(svg);
-  } catch (err) {
-    console.error(`[Poster] Error: ${err.message}`);
-    res.status(500).send("Poster error");
-  }
-});
 
 // ─── Catalog ──────────────────────────────────────────────────────────────────
 
@@ -372,7 +129,7 @@ app.get("/:config/catalog/:type/:id/:extra?.json", async (req, res) => {
 
   console.log(`[Catalog] Request: type=${type} id=${id} skip=${skip} retro=${config.retro}`);
   try {
-    const metas = await fetchCatalog(id, type, skip, baseUrl, config);
+    const metas = await fetchCatalog(id, type, skip, baseUrl);
     res.json({ metas });
   } catch (err) {
     console.error(`[Catalog] Error: ${err.message}`);
