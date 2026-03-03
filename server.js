@@ -221,7 +221,8 @@ app.get("/ai-poster", async (req, res) => {
 async function handleCatalog(req, res) {
   const { type, id } = req.params;
   const baseUrl = getBaseUrl(req);
-  const skip = parseInt(req.query.skip || "0");
+  // skip can come as query param or inside extra path segment
+  const skip = parseInt(req.query.skip || req.params.extra?.replace("skip=","") || "0");
   console.log(`[Catalog] type=${type} id=${id} skip=${skip}`);
   try {
     const metas = await fetchCatalog(id, type, skip, baseUrl);
