@@ -87,37 +87,23 @@ app.get("/manifest.json", (req, res) => {
 
 // ─── AI Poster via fal.ai ───────────────────────────────────────────────────
 
-const AI_CACHE = new Map(); // in-memory cache
+const AI_CACHE = new Map();      // buffer cache
+const AI_PENDING = new Map();    // in-flight promises (dedup)
+let activeRequests = 0;
+const MAX_CONCURRENT = 3;
+const requestQueue = [];
 
-app.get("/ai-poster", async (req, res) => {
-  const { title, year, type } = req.query;
-  const fallback = req.query.fallback;
-
-  if (!title) {
-    if (fallback) return res.redirect(fallback);
-    return res.status(400).send("Missing title");
+function processQueue() {
+  while (requestQueue.length > 0 && activeRequests < MAX_CONCURRENT) {
+    const next = requestQueue.shift();
+    next();
   }
+}
 
-  const cacheKey = `${title}_${year}`;
-  if (AI_CACHE.has(cacheKey)) {
-    console.log(`[AI Poster] Cache hit: "${title}"`);
-    const cached = AI_CACHE.get(cacheKey);
-    res.set("Content-Type", "image/jpeg");
-    res.set("Cache-Control", "public, max-age=604800");
-    return res.send(cached);
-  }
-
-  const FAL_KEY = process.env.FAL_API_KEY;
-  if (!FAL_KEY) {
-    console.error("[AI Poster] FAL_API_KEY not set");
-    if (fallback) return res.redirect(fallback);
-    return res.status(500).send("No API key");
-  }
-
+async function generatePoster(title, year, type, FAL_KEY) {
   const prompt = `alternative movie poster illustration, bold black ink outlines, flat colors, limited palette yellow red black white cream, screen print style, retro typography, graphic novel aesthetic, no photorealism, portrait orientation, title text: "${title}"${year ? ` (${year})` : ""}, ${type === "series" ? "TV series" : "film"}`;
 
-  console.log(`[AI Poster] Generating via fal.ai: "${title}"`);
-
+  activeRequests++;
   try {
     const falRes = await fetch("https://fal.run/fal-ai/flux/schnell", {
       method: "POST",
@@ -131,33 +117,99 @@ app.get("/ai-poster", async (req, res) => {
         num_inference_steps: 4,
         num_images: 1,
         enable_safety_checker: false
-      }),
-      timeout: 30000
+      })
     });
 
     if (!falRes.ok) {
       const errText = await falRes.text();
-      throw new Error(`fal.ai ${falRes.status}: ${errText.slice(0, 100)}`);
+      throw new Error(`fal.ai ${falRes.status}: ${errText.slice(0, 120)}`);
     }
 
     const data = await falRes.json();
     const imageUrl = data?.images?.[0]?.url;
-    if (!imageUrl) throw new Error("No image URL in fal.ai response");
+    if (!imageUrl) throw new Error("No image URL in response");
 
-    // Fetch the actual image
     const imgRes = await fetch(imageUrl);
-    if (!imgRes.ok) throw new Error(`Image fetch failed: ${imgRes.status}`);
+    if (!imgRes.ok) throw new Error(`Image fetch ${imgRes.status}`);
     const buffer = await imgRes.buffer();
+    return buffer;
+  } finally {
+    activeRequests--;
+    processQueue();
+  }
+}
 
-    AI_CACHE.set(cacheKey, buffer);
-    console.log(`[AI Poster] Success: "${title}" (${buffer.length} bytes)`);
+app.get("/ai-poster", async (req, res) => {
+  const { title, year, type } = req.query;
+  const fallback = req.query.fallback;
 
+  if (!title) {
+    if (fallback) return res.redirect(fallback);
+    return res.status(400).send("Missing title");
+  }
+
+  const cacheKey = `${title}_${year}`;
+
+  // Serve from cache
+  if (AI_CACHE.has(cacheKey)) {
+    const buf = AI_CACHE.get(cacheKey);
     res.set("Content-Type", "image/jpeg");
     res.set("Cache-Control", "public, max-age=604800");
-    res.send(buffer);
+    return res.send(buf);
+  }
 
-  } catch (err) {
-    console.error(`[AI Poster] Error: ${err.message}`);
+  const FAL_KEY = process.env.FAL_API_KEY;
+  if (!FAL_KEY) {
+    if (fallback) return res.redirect(fallback);
+    return res.status(500).send("No API key");
+  }
+
+  // Deduplicate: if same poster already generating, wait for it
+  if (AI_PENDING.has(cacheKey)) {
+    try {
+      const buf = await AI_PENDING.get(cacheKey);
+      res.set("Content-Type", "image/jpeg");
+      res.set("Cache-Control", "public, max-age=604800");
+      return res.send(buf);
+    } catch {
+      if (fallback) return res.redirect(fallback);
+      return res.status(500).send("Failed");
+    }
+  }
+
+  console.log(`[AI Poster] Queuing: "${title}" (active=${activeRequests})`);
+
+  // Queue the generation
+  const promise = new Promise((resolve, reject) => {
+    const task = async () => {
+      try {
+        const buf = await generatePoster(title, year, type, FAL_KEY);
+        AI_CACHE.set(cacheKey, buf);
+        console.log(`[AI Poster] Done: "${title}"`);
+        resolve(buf);
+      } catch (err) {
+        console.error(`[AI Poster] Error: "${title}" — ${err.message}`);
+        reject(err);
+      } finally {
+        AI_PENDING.delete(cacheKey);
+      }
+    };
+
+    if (activeRequests < MAX_CONCURRENT) {
+      task();
+    } else {
+      requestQueue.push(task);
+    }
+  });
+
+  AI_PENDING.set(cacheKey, promise);
+
+  try {
+    const buf = await promise;
+    res.set("Content-Type", "image/jpeg");
+    res.set("Cache-Control", "public, max-age=604800");
+    res.send(buf);
+  } catch {
     if (fallback) return res.redirect(fallback);
     res.status(500).send("Failed");
   }
