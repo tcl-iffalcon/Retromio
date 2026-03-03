@@ -1,6 +1,6 @@
 {
   "id": "com.retromio.addon",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "name": "Retromio",
   "description": "Nuvio ve Stremio için osterleri AI aracılığıyla düzenler, Vidlink ve  NetMirror kaynaklarından içerik sunar.",
   "logo": "https://img.icons8.com/fluency/96/retro-tv.png",
@@ -12,26 +12,34 @@
     {
       "type": "movie",
       "id": "retromio_trending_movies",
-      "name": "Retromio Trending",
-      "extra": [{ "name": "skip", "isRequired": false }]
+      "name": "Retromio Trend",
+      "extra": [
+        { "name": "skip", "isRequired": false }
+      ]
     },
     {
       "type": "movie",
       "id": "retromio_popular_movies",
-      "name": "Retromio Popular",
-      "extra": [{ "name": "skip", "isRequired": false }]
+      "name": "Retromio Popüler",
+      "extra": [
+        { "name": "skip", "isRequired": false }
+      ]
     },
     {
       "type": "series",
       "id": "retromio_trending_series",
-      "name": "Retromio Trending",
-      "extra": [{ "name": "skip", "isRequired": false }]
+      "name": "Retromio Trend",
+      "extra": [
+        { "name": "skip", "isRequired": false }
+      ]
     },
     {
       "type": "series",
       "id": "retromio_popular_series",
-      "name": "Retromio Popular",
-      "extra": [{ "name": "skip", "isRequired": false }]
+      "name": "Retromio Popüler",
+      "extra": [
+        { "name": "skip", "isRequired": false }
+      ]
     }
   ]
 }
