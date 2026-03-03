@@ -3,17 +3,43 @@
   "version": "1.0.0",
   "scrapers": [
     {
-      "id": "retromio",
-      "name": "Retromio",
-      "description": "VidSrc, VixSrc, Vidlink ve daha fazlası",
+      "id": "retromio-vidlink",
+      "name": "Retromio Vidlink",
+      "description": "Vidlink kaynağı",
       "version": "1.0.0",
       "author": "tcl-iffalcon",
       "supportedTypes": ["movie", "tv"],
-      "filename": "providers/multisource.js",
+      "filename": "providers/vidlink.js",
       "enabled": true,
       "logo": "https://img.icons8.com/fluency/96/retro-tv.png",
-      "contentLanguage": ["en", "tr"],
+      "contentLanguage": ["en"],
       "formats": ["m3u8", "mp4"]
+    },
+    {
+      "id": "retromio-netmirror",
+      "name": "Retromio NetMirror",
+      "description": "Netflix, Prime, Disney içerikleri",
+      "version": "1.0.0",
+      "author": "tcl-iffalcon",
+      "supportedTypes": ["movie", "tv"],
+      "filename": "providers/netmirror.js",
+      "enabled": true,
+      "logo": "https://img.icons8.com/fluency/96/retro-tv.png",
+      "contentLanguage": ["en"],
+      "formats": ["m3u8"]
+    },
+    {
+      "id": "retromio-streamflix",
+      "name": "Retromio StreamFlix",
+      "description": "StreamFlix film kaynağı",
+      "version": "1.0.0",
+      "author": "tcl-iffalcon",
+      "supportedTypes": ["movie"],
+      "filename": "providers/streamflix.js",
+      "enabled": true,
+      "logo": "https://img.icons8.com/fluency/96/retro-tv.png",
+      "contentLanguage": ["en"],
+      "formats": ["mp4", "m3u8"]
     }
   ]
 }
