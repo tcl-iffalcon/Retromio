@@ -94,12 +94,12 @@ const B2 = new S3Client({
   endpoint: "https://s3.us-east-005.backblazeb2.com",
   region: "us-east-005",
   credentials: {
-    accessKeyId: process.env.B2_KEY_ID || "f2d571efe5e4",
+    accessKeyId: process.env.B2_KEY_ID,
     secretAccessKey: process.env.B2_APP_KEY
   }
 });
 const B2_BUCKET = "retromio-posters";
-const B2_PUBLIC = `https://f2d571efe5e4.s3.us-east-005.backblazeb2.com/${B2_BUCKET}`;
+const B2_PUBLIC = `https://${process.env.B2_KEY_ID}.s3.us-east-005.backblazeb2.com/${B2_BUCKET}`;
 
 const AI_PENDING = new Map();
 let activeRequests = 0;
