@@ -175,8 +175,8 @@ async function generateWithFal(title, year, type) {
   try {
     console.log(`[AI Poster] fal.ai flux/schnell request: "${title}" (style ${styleIndex})`);
 
-    // Submit to flux/dev — much higher quality than schnell
-    const submitRes = await fetch("https://queue.fal.run/fal-ai/flux/schnell", {
+    // Use direct run endpoint (sync) — simpler and more reliable than queue
+    const runRes = await fetch("https://fal.run/fal-ai/flux/schnell", {
       method: "POST",
       headers: {
         "Authorization": `Key ${process.env.FAL_API_KEY}`,
@@ -189,39 +189,23 @@ async function generateWithFal(title, year, type) {
         seed,
         num_images: 1,
         enable_safety_checker: false
-      })
+      }),
+      timeout: 120000
     });
 
-    if (!submitRes.ok) {
-      const txt = await submitRes.text();
-      throw new Error(`fal.ai submit failed ${submitRes.status}: ${txt}`);
+    if (!runRes.ok) {
+      const txt = await runRes.text();
+      throw new Error(`fal.ai run failed ${runRes.status}: ${txt}`);
     }
 
-    const { request_id } = await submitRes.json();
-    console.log(`[AI Poster] fal.ai queued: ${request_id}`);
+    const result = await runRes.json();
+    const imageUrl = result.images?.[0]?.url || result.image?.url;
+    if (!imageUrl) throw new Error(`fal.ai: no image in response: ${JSON.stringify(result)}`);
 
-    // Poll for result
-    for (let i = 0; i < 90; i++) {
-      await sleep(2000);
-      const statusRes = await fetch(`https://queue.fal.run/fal-ai/flux/schnell/requests/${request_id}`, {
-        headers: { "Authorization": `Key ${process.env.FAL_API_KEY}` }
-      });
-      if (!statusRes.ok) continue;
-      const result = await statusRes.json();
-
-      if (result.status === "COMPLETED" || result.images) {
-        const imageUrl = result.images?.[0]?.url || result.image?.url;
-        if (!imageUrl) throw new Error("fal.ai: no image in response");
-        console.log(`[AI Poster] fal.ai done: "${title}"`);
-        const imgRes = await fetch(imageUrl);
-        if (!imgRes.ok) throw new Error(`Image download failed: ${imgRes.status}`);
-        return await imgRes.buffer();
-      }
-
-      if (result.status === "FAILED") throw new Error(`fal.ai job failed: ${JSON.stringify(result)}`);
-    }
-
-    throw new Error("fal.ai: timed out waiting for result");
+    console.log(`[AI Poster] fal.ai done: "${title}"`);
+    const imgRes = await fetch(imageUrl);
+    if (!imgRes.ok) throw new Error(`Image download failed: ${imgRes.status}`);
+    return await imgRes.buffer();
   } finally {
     activeRequests--;
     processQueue();
