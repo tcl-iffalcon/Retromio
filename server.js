@@ -24,13 +24,13 @@ function getBaseUrl(req) {
 }
 
 function getUserConfig(req) {
-  // Config is encoded in the URL path: /:config/manifest.json
   const config = req.params.config;
-  if (!config) return { retro: false };
+  if (!config) return { retro: false, ai: false, aiStyle: "pulp" };
   try {
-    return JSON.parse(Buffer.from(config, "base64").toString("utf8"));
+    const parsed = JSON.parse(Buffer.from(config, "base64").toString("utf8"));
+    return { retro: false, ai: false, aiStyle: "pulp", ...parsed };
   } catch {
-    return { retro: false };
+    return { retro: false, ai: false, aiStyle: "pulp" };
   }
 }
 
@@ -205,7 +205,7 @@ app.get("/configure", (req, res) => {
 
     <div class="card">
       <span class="option-label">🎞 Poster Style</span>
-      <div class="poster-options">
+      <div class="poster-options" style="grid-template-columns: 1fr 1fr 1fr;">
         <div class="poster-option selected" onclick="selectStyle('original', this)">
           <div class="preview preview-original">🎬</div>
           <div class="name">Original</div>
@@ -213,9 +213,36 @@ app.get("/configure", (req, res) => {
         </div>
         <div class="poster-option" onclick="selectStyle('retro', this)">
           <div class="preview preview-retro">🎞</div>
-          <div class="name">Retro</div>
+          <div class="name">Retro Filter</div>
           <div class="desc">Vintage film aesthetic</div>
         </div>
+        <div class="poster-option" onclick="selectStyle('ai', this)">
+          <div class="preview" style="background:linear-gradient(135deg,#1a0a2e,#0a1a2e);font-size:2rem;">✦</div>
+          <div class="name">AI Poster</div>
+          <div class="desc">Marquee-style retro art</div>
+        </div>
+      </div>
+      <div id="aiStyleSection" style="display:none; margin-bottom:1.5rem;">
+        <span class="option-label" style="margin-bottom:0.75rem; display:block;">✦ AI Art Style</span>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.6rem;">
+          <div class="poster-option selected" id="aiStyle_pulp" onclick="selectAiStyle('pulp', this)">
+            <div class="name">Pulp Fiction</div>
+            <div class="desc">1950s noir illustration</div>
+          </div>
+          <div class="poster-option" id="aiStyle_comic" onclick="selectAiStyle('comic', this)">
+            <div class="name">Comic Book</div>
+            <div class="desc">Bold ink, halftone dots</div>
+          </div>
+          <div class="poster-option" id="aiStyle_soviet" onclick="selectAiStyle('soviet', this)">
+            <div class="name">Constructivist</div>
+            <div class="desc">Soviet propaganda style</div>
+          </div>
+          <div class="poster-option" id="aiStyle_neon" onclick="selectAiStyle('neon', this)">
+            <div class="name">Synthwave</div>
+            <div class="desc">80s neon retrofuturism</div>
+          </div>
+        </div>
+        <p style="font-size:0.7rem;color:#5a5248;margin-top:0.75rem;">⚠ İlk yüklemede 5-10 sn gecikme olabilir. Posterler 7 gün önbelleklenir.</p>
       </div>
 
       <button class="install-btn" onclick="install()">
@@ -234,16 +261,28 @@ app.get("/configure", (req, res) => {
 
   <script>
     let selectedStyle = 'original';
+    let selectedAiStyle = 'pulp';
     const BASE_URL = '${baseUrl}';
 
     function selectStyle(style, el) {
       selectedStyle = style;
-      document.querySelectorAll('.poster-option').forEach(o => o.classList.remove('selected'));
+      document.querySelectorAll('.poster-options .poster-option').forEach(o => o.classList.remove('selected'));
+      el.classList.add('selected');
+      document.getElementById('aiStyleSection').style.display = style === 'ai' ? 'block' : 'none';
+    }
+
+    function selectAiStyle(style, el) {
+      selectedAiStyle = style;
+      document.querySelectorAll('#aiStyleSection .poster-option').forEach(o => o.classList.remove('selected'));
       el.classList.add('selected');
     }
 
     function getManifestUrl() {
-      const config = { retro: selectedStyle === 'retro' };
+      const config = {
+        retro: selectedStyle === 'retro',
+        ai: selectedStyle === 'ai',
+        aiStyle: selectedAiStyle
+      };
       const encoded = btoa(JSON.stringify(config));
       return BASE_URL + '/' + encoded + '/manifest.json';
     }
@@ -277,6 +316,54 @@ app.get("/:config/manifest.json", (req, res) => {
 
 app.get("/manifest.json", (req, res) => {
   res.json(baseManifest);
+});
+
+// ─── AI Poster (Pollinations.AI) ─────────────────────────────────────────────
+
+app.get("/ai-poster", async (req, res) => {
+  const { title, year, type, genres } = req.query;
+  if (!title) return res.status(400).send("Missing title param");
+
+  // Style presets — pick one via ?style=
+  const style = req.query.style || "pulp";
+  const stylePrompts = {
+    pulp:     "vintage 1950s pulp fiction movie poster illustration, dramatic composition, bold typography, aged paper texture, noir lighting",
+    comic:    "retro comic book cover art style, bold ink outlines, halftone dots, vibrant primary colors, action composition",
+    soviet:   "soviet constructivist propaganda poster style, geometric shapes, bold flat colors, strong diagonal composition",
+    woodcut:  "vintage woodcut print movie poster, black and white with one accent color, rough texture, expressionist style",
+    neon:     "1980s synthwave neon movie poster, glowing neon colors, chrome lettering, dark background, retrofuturistic",
+  };
+
+  const genreHint = genres ? `Genre: ${genres}.` : "";
+  const typeHint = type === "series" ? "TV series" : "film";
+  const prompt = `${stylePrompts[style] || stylePrompts.pulp}, title: "${title}" (${year || ""}), ${typeHint}. ${genreHint} No watermarks, portrait orientation, cinematic.`;
+
+  const encodedPrompt = encodeURIComponent(prompt);
+  const width = 400;
+  const height = 600;
+  const seed = Math.abs(title.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0)); // deterministic per title
+
+  const pollinationsUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${width}&height=${height}&seed=${seed}&nologo=true&model=flux`;
+
+  console.log(`[AI Poster] Generating: "${title}" style=${style}`);
+
+  try {
+    const response = await fetch(pollinationsUrl, { timeout: 30000 });
+    if (!response.ok) throw new Error(`Pollinations error: ${response.status}`);
+
+    const buffer = await response.buffer();
+    const contentType = response.headers.get("content-type") || "image/jpeg";
+
+    res.set("Content-Type", contentType);
+    res.set("Cache-Control", "public, max-age=604800"); // cache 7 days
+    res.send(buffer);
+  } catch (err) {
+    console.error(`[AI Poster] Error: ${err.message}`);
+    // Fallback: redirect to original TMDB poster if provided
+    const fallback = req.query.fallback;
+    if (fallback) return res.redirect(fallback);
+    res.status(500).send("AI poster generation failed");
+  }
 });
 
 // ─── Retro Poster Proxy ───────────────────────────────────────────────────────
@@ -378,7 +465,7 @@ app.get("/:config/catalog/:type/:id/:extra?.json", async (req, res) => {
 
   console.log(`[Catalog] Request: type=${type} id=${id} skip=${skip} retro=${config.retro}`);
   try {
-    const metas = await fetchCatalog(id, type, skip, baseUrl, config.retro);
+    const metas = await fetchCatalog(id, type, skip, baseUrl, config);
     res.json({ metas });
   } catch (err) {
     console.error(`[Catalog] Error: ${err.message}`);
