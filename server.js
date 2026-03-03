@@ -103,11 +103,15 @@ const B2_PUBLIC = `https://f2d571efe5e4.s3.us-east-005.backblazeb2.com/${B2_BUCK
 
 const AI_PENDING = new Map();
 let activeRequests = 0;
-const MAX_CONCURRENT = 3;
+const MAX_CONCURRENT = 1;   // Pollinations 530 = rate limit — keep at 1
 const requestQueue = [];
 
 // ── Cache version: bump this to invalidate all stored posters ────────────────
 const POSTER_VERSION = "v4";
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
 function processQueue() {
   while (requestQueue.length > 0 && activeRequests < MAX_CONCURRENT) {
@@ -160,12 +164,30 @@ async function generateWithPollinations(title, year, type) {
 
   activeRequests++;
   try {
-    console.log(`[AI Poster] Pollinations request: "${title}" (style ${styleIndex})`);
-    const res = await fetch(url, { timeout: 90000 });
-    if (!res.ok) throw new Error(`Pollinations ${res.status}`);
-    return await res.buffer();
+    const MAX_RETRIES = 5;
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      console.log(`[AI Poster] Pollinations request: "${title}" (style ${styleIndex}, attempt ${attempt})`);
+      try {
+        const res = await fetch(url, { timeout: 120000 });
+        if (res.status === 530 || res.status === 429) {
+          const delay = attempt * 8000;
+          console.warn(`[AI Poster] Rate limited (${res.status}), retrying in ${delay}ms...`);
+          await sleep(delay);
+          continue;
+        }
+        if (!res.ok) throw new Error(`Pollinations ${res.status}`);
+        return await res.buffer();
+      } catch (err) {
+        if (attempt === MAX_RETRIES) throw err;
+        const delay = attempt * 8000;
+        console.warn(`[AI Poster] Error, retrying in ${delay}ms: ${err.message}`);
+        await sleep(delay);
+      }
+    }
+    throw new Error(`Pollinations failed after ${MAX_RETRIES} attempts`);
   } finally {
     activeRequests--;
+    await sleep(2000); // small gap between requests
     processQueue();
   }
 }
