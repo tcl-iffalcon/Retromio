@@ -3,10 +3,10 @@ const fetch = require("node-fetch");
 const TMDB_API_KEY = "439c478a771f35c05022f9feabcca01c";
 const TMDB_BASE = "https://api.themoviedb.org/3";
 
-// Polyfill fetch for providers
 global.fetch = fetch;
 
-const multisource = require("./providers/multisource.js");
+const vidlink = require("./providers/vidlink.js");
+const netmirror = require("./providers/netmirror.js");
 
 async function resolveTmdbId(id, type) {
   const isMovie = type === "movie";
@@ -26,7 +26,6 @@ async function fetchStreams(id, type, season, episode) {
   const isMovie = type === "movie";
   const mediaType = isMovie ? "movie" : "tv";
 
-  // Parse season/episode from video id (format: tt1234:1:2)
   let seasonNum = season ? parseInt(season) : null;
   let episodeNum = episode ? parseInt(episode) : null;
 
@@ -45,16 +44,23 @@ async function fetchStreams(id, type, season, episode) {
 
   console.log(`[Stream] Fetching streams for TMDB ID: ${tmdbId}, type: ${mediaType}${seasonNum ? ` S${seasonNum}E${episodeNum}` : ""}`);
 
-  const result = await Promise.allSettled([
-    multisource.getStreams(tmdbId, mediaType, seasonNum, episodeNum)
+  const [vidlinkResult, netmirrorResult] = await Promise.allSettled([
+    vidlink.getStreams(tmdbId, mediaType, seasonNum, episodeNum),
+    netmirror.getStreams(tmdbId, mediaType, seasonNum, episodeNum)
   ]);
 
   const streams = [];
 
-  if (result[0].status === "fulfilled" && result[0].value) {
-    streams.push(...result[0].value);
+  if (vidlinkResult.status === "fulfilled" && vidlinkResult.value) {
+    streams.push(...vidlinkResult.value);
   } else {
-    console.log(`[Stream] Multisource failed: ${result[0].reason?.message}`);
+    console.log(`[Stream] Vidlink failed: ${vidlinkResult.reason?.message}`);
+  }
+
+  if (netmirrorResult.status === "fulfilled" && netmirrorResult.value) {
+    streams.push(...netmirrorResult.value);
+  } else {
+    console.log(`[Stream] NetMirror failed: ${netmirrorResult.reason?.message}`);
   }
 
   console.log(`[Stream] Total streams found: ${streams.length}`);
