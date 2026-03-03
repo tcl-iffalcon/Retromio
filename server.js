@@ -107,7 +107,7 @@ const MAX_CONCURRENT = 2;   // fal.ai free tier limit is 2 concurrent
 const requestQueue = [];
 
 // ── Cache version: bump this to invalidate all stored posters ────────────────
-const POSTER_VERSION = "v9";
+const POSTER_VERSION = "v10";
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -209,39 +209,42 @@ async function generateWithFal(title, year, type, genreIds, overview) {
   const seed = Math.abs([...(title || "x")].reduce((a, c) => a + c.charCodeAt(0), 0));
   activeRequests++;
   try {
-    console.log(`[AI Poster] fal.ai flux/schnell request: "${title}" (genre: ${styleLabel})`);
+    console.log(`[AI Poster] HuggingFace request: "${title}" (genre: ${styleLabel})`);
 
-    // Use direct run endpoint (sync) — simpler and more reliable than queue
-    const runRes = await fetch("https://fal.run/fal-ai/flux/schnell", {
-      method: "POST",
-      headers: {
-        "Authorization": `Key ${process.env.FAL_API_KEY}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        prompt,
-        image_size: { width: 512, height: 768 },
-        num_inference_steps: 4,
-        seed,
-        num_images: 1,
-        enable_safety_checker: false
-      }),
-      timeout: 120000
-    });
+    const hfRes = await fetch(
+      "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell",
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${process.env.HF_TOKEN}`,
+          "Content-Type": "application/json",
+          "x-wait-for-model": "true"
+        },
+        body: JSON.stringify({
+          inputs: prompt,
+          parameters: {
+            width: 512,
+            height: 768,
+            num_inference_steps: 4,
+            seed
+          }
+        }),
+        timeout: 120000
+      }
+    );
 
-    if (!runRes.ok) {
-      const txt = await runRes.text();
-      throw new Error(`fal.ai run failed ${runRes.status}: ${txt}`);
+    if (!hfRes.ok) {
+      const txt = await hfRes.text();
+      throw new Error(`HuggingFace failed ${hfRes.status}: ${txt}`);
     }
 
-    const result = await runRes.json();
-    const imageUrl = result.images?.[0]?.url || result.image?.url;
-    if (!imageUrl) throw new Error(`fal.ai: no image in response: ${JSON.stringify(result)}`);
+    // HF returns raw image bytes
+    const arrayBuffer = await hfRes.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    if (buffer.length < 1000) throw new Error(`HuggingFace returned too small response: ${buffer.length} bytes`);
 
-    console.log(`[AI Poster] fal.ai done: "${title}"`);
-    const imgRes = await fetch(imageUrl);
-    if (!imgRes.ok) throw new Error(`Image download failed: ${imgRes.status}`);
-    return await imgRes.buffer();
+    console.log(`[AI Poster] HuggingFace done: "${title}" (${buffer.length} bytes)`);
+    return buffer;
   } finally {
     activeRequests--;
     processQueue();
