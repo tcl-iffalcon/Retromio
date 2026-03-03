@@ -103,7 +103,7 @@ const B2_PUBLIC = `https://${process.env.B2_KEY_ID}.s3.us-east-005.backblazeb2.c
 
 const AI_PENDING = new Map();
 let activeRequests = 0;
-const MAX_CONCURRENT = 5;   // fal.ai handles concurrent requests fine
+const MAX_CONCURRENT = 2;   // fal.ai free tier limit is 2 concurrent
 const requestQueue = [];
 
 // ── Cache version: bump this to invalidate all stored posters ────────────────
