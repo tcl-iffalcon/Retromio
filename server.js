@@ -137,9 +137,12 @@ async function uploadToB2(key, buffer) {
 }
 
 async function generateWithPollinations(title, year, type) {
-  const prompt = `vintage alternative movie poster illustration, bold black ink outlines, flat colors, limited palette yellow red black white, collage of multiple characters, screen print style, Joshua Budich art style, retro typography at bottom, no photorealism, graphic novel aesthetic, portrait orientation, title: "${title}"${year ? ` (${year})` : ""}, ${type === "series" ? "TV series" : "film"}`;
+  // Görsellerdeki o özel "eski kağıt" ve "mürekkep" dokusunu vurgulayan yeni prompt
+  const prompt = `vintage retro alternative movie poster, high contrast comic book illustration, bold ink outlines, screen print aesthetic, vibrant limited color palette, dramatic lighting, detailed character collage, Saul Bass and Joshua Budich fusion style, distressed paper texture, retro bold typography at bottom, ${type === "series" ? "TV series" : "cinema film"} style, title: "${title}" ${year ? `(${year})` : ""}, 1970s graphic novel look`;
 
   const seed = Math.abs([...(title || "x")].reduce((a, c) => a + c.charCodeAt(0), 0));
+  
+  // Modeli 'flux' olarak tutmak iyi bir fikir çünkü detaylarda çok başarılıdır
   const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=512&height=768&seed=${seed}&nologo=true&model=flux`;
 
   activeRequests++;
