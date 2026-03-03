@@ -85,10 +85,22 @@ app.get("/manifest.json", (req, res) => {
   res.json(baseManifest);
 });
 
-// ─── AI Poster via fal.ai ───────────────────────────────────────────────────
+// ─── Backblaze B2 + fal.ai AI Poster ────────────────────────────────────────
 
-const AI_CACHE = new Map();      // buffer cache
-const AI_PENDING = new Map();    // in-flight promises (dedup)
+const { S3Client, PutObjectCommand, HeadObjectCommand, GetObjectCommand } = require("@aws-sdk/client-s3");
+
+const B2 = new S3Client({
+  endpoint: "https://s3.us-east-005.backblazeb2.com",
+  region: "us-east-005",
+  credentials: {
+    accessKeyId: process.env.B2_KEY_ID || "f2d571efe5e4",
+    secretAccessKey: process.env.B2_APP_KEY
+  }
+});
+const B2_BUCKET = "retromio-posters";
+const B2_PUBLIC = `https://f2d571efe5e4.s3.us-east-005.backblazeb2.com/${B2_BUCKET}`;
+
+const AI_PENDING = new Map();
 let activeRequests = 0;
 const MAX_CONCURRENT = 3;
 const requestQueue = [];
@@ -100,7 +112,34 @@ function processQueue() {
   }
 }
 
-async function generatePoster(title, year, type, FAL_KEY) {
+function posterKey(title, year) {
+  const safe = (title || "unknown").replace(/[^a-z0-9]/gi, "_").toLowerCase();
+  return `${safe}_${year || "0"}.jpg`;
+}
+
+async function existsInB2(key) {
+  try {
+    await B2.send(new HeadObjectCommand({ Bucket: B2_BUCKET, Key: key }));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function uploadToB2(key, buffer) {
+  await B2.send(new PutObjectCommand({
+    Bucket: B2_BUCKET,
+    Key: key,
+    Body: buffer,
+    ContentType: "image/jpeg",
+    ACL: "public-read"
+  }));
+}
+
+async function generateWithFal(title, year, type) {
+  const FAL_KEY = process.env.FAL_API_KEY;
+  if (!FAL_KEY) throw new Error("FAL_API_KEY not set");
+
   const prompt = `alternative movie poster illustration, bold black ink outlines, flat colors, limited palette yellow red black white cream, screen print style, retro typography, graphic novel aesthetic, no photorealism, portrait orientation, title text: "${title}"${year ? ` (${year})` : ""}, ${type === "series" ? "TV series" : "film"}`;
 
   activeRequests++;
@@ -120,23 +159,45 @@ async function generatePoster(title, year, type, FAL_KEY) {
       })
     });
 
-    if (!falRes.ok) {
-      const errText = await falRes.text();
-      throw new Error(`fal.ai ${falRes.status}: ${errText.slice(0, 120)}`);
-    }
-
+    if (!falRes.ok) throw new Error(`fal.ai ${falRes.status}`);
     const data = await falRes.json();
     const imageUrl = data?.images?.[0]?.url;
-    if (!imageUrl) throw new Error("No image URL in response");
+    if (!imageUrl) throw new Error("No image URL");
 
     const imgRes = await fetch(imageUrl);
     if (!imgRes.ok) throw new Error(`Image fetch ${imgRes.status}`);
-    const buffer = await imgRes.buffer();
-    return buffer;
+    return await imgRes.buffer();
   } finally {
     activeRequests--;
     processQueue();
   }
+}
+
+// Pre-generate poster in background and store in B2
+async function prewarmPoster(title, year, type) {
+  const key = posterKey(title, year);
+  if (await existsInB2(key)) return;
+  if (AI_PENDING.has(key)) return;
+
+  const promise = new Promise((resolve, reject) => {
+    const task = async () => {
+      try {
+        const buf = await generateWithFal(title, year, type);
+        await uploadToB2(key, buf);
+        console.log(`[AI Poster] Stored in B2: ${key}`);
+        resolve();
+      } catch (err) {
+        console.error(`[AI Poster] Prewarm failed: ${key} — ${err.message}`);
+        reject(err);
+      } finally {
+        AI_PENDING.delete(key);
+      }
+    };
+    if (activeRequests < MAX_CONCURRENT) task();
+    else requestQueue.push(task);
+  });
+
+  AI_PENDING.set(key, promise);
 }
 
 app.get("/ai-poster", async (req, res) => {
@@ -148,71 +209,71 @@ app.get("/ai-poster", async (req, res) => {
     return res.status(400).send("Missing title");
   }
 
-  const cacheKey = `${title}_${year}`;
+  const key = posterKey(title, year);
 
-  // Serve from cache
-  if (AI_CACHE.has(cacheKey)) {
-    const buf = AI_CACHE.get(cacheKey);
-    res.set("Content-Type", "image/jpeg");
-    res.set("Cache-Control", "public, max-age=604800");
-    return res.send(buf);
+  // 1. Check B2 first — instant if exists
+  try {
+    const exists = await existsInB2(key);
+    if (exists) {
+      console.log(`[AI Poster] B2 hit: ${key}`);
+      return res.redirect(`${B2_PUBLIC}/${key}`);
+    }
+  } catch (err) {
+    console.error(`[AI Poster] B2 check error: ${err.message}`);
   }
 
+  // 2. Generate, upload to B2, then serve
   const FAL_KEY = process.env.FAL_API_KEY;
   if (!FAL_KEY) {
     if (fallback) return res.redirect(fallback);
     return res.status(500).send("No API key");
   }
 
-  // Deduplicate: if same poster already generating, wait for it
-  if (AI_PENDING.has(cacheKey)) {
+  // Deduplicate concurrent requests for same poster
+  if (AI_PENDING.has(key)) {
     try {
-      const buf = await AI_PENDING.get(cacheKey);
-      res.set("Content-Type", "image/jpeg");
-      res.set("Cache-Control", "public, max-age=604800");
-      return res.send(buf);
+      await AI_PENDING.get(key);
+      return res.redirect(`${B2_PUBLIC}/${key}`);
     } catch {
       if (fallback) return res.redirect(fallback);
       return res.status(500).send("Failed");
     }
   }
 
-  console.log(`[AI Poster] Queuing: "${title}" (active=${activeRequests})`);
+  console.log(`[AI Poster] Generating: "${title}" (active=${activeRequests})`);
 
-  // Queue the generation
   const promise = new Promise((resolve, reject) => {
     const task = async () => {
       try {
-        const buf = await generatePoster(title, year, type, FAL_KEY);
-        AI_CACHE.set(cacheKey, buf);
-        console.log(`[AI Poster] Done: "${title}"`);
-        resolve(buf);
+        const buf = await generateWithFal(title, year, type);
+        await uploadToB2(key, buf);
+        console.log(`[AI Poster] Done + stored: ${key}`);
+        resolve();
       } catch (err) {
-        console.error(`[AI Poster] Error: "${title}" — ${err.message}`);
+        console.error(`[AI Poster] Error: ${key} — ${err.message}`);
         reject(err);
       } finally {
-        AI_PENDING.delete(cacheKey);
+        AI_PENDING.delete(key);
       }
     };
-
-    if (activeRequests < MAX_CONCURRENT) {
-      task();
-    } else {
-      requestQueue.push(task);
-    }
+    if (activeRequests < MAX_CONCURRENT) task();
+    else requestQueue.push(task);
   });
 
-  AI_PENDING.set(cacheKey, promise);
+  AI_PENDING.set(key, promise);
 
   try {
-    const buf = await promise;
-    res.set("Content-Type", "image/jpeg");
-    res.set("Cache-Control", "public, max-age=604800");
-    res.send(buf);
+    await promise;
+    res.redirect(`${B2_PUBLIC}/${key}`);
   } catch {
     if (fallback) return res.redirect(fallback);
     res.status(500).send("Failed");
   }
+});
+
+// Called from catalog to prewarm posters in background
+app.get("/prewarm", async (req, res) => {
+  res.json({ ok: true }); // respond immediately
 });
 
 // ─── Catalog ──────────────────────────────────────────────────────────────────
