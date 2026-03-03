@@ -1,7 +1,7 @@
 {
-  "name": "retromio",
-  "version": "1.0.0",
-  "description": "Retromio - Stremio Addon with Vidlink & NetMirror",
+  "name": "Retromio",
+  "version": "1.2.0",
+  "description": "uvio ve Stremio için osterleri AI aracılığıyla düzenler, Vidlink ve  NetMirror kaynaklarından içerik sunar.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
