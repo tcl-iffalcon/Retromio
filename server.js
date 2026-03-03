@@ -5,9 +5,9 @@ const path = require("path");
 
 global.fetch = fetch;
 
-const { fetchCatalog } = require("./routes/catalog");
-const { fetchMeta } = require("./routes/meta");
-const { fetchStreams } = require("./routes/stream");
+const { fetchCatalog } = require("./catalog");
+const { fetchMeta } = require("./meta");
+const { fetchStreams } = require("./stream");
 const baseManifest = require("./manifest.json");
 
 const app = express();
