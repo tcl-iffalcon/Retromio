@@ -107,7 +107,7 @@ const MAX_CONCURRENT = 5;   // fal.ai handles concurrent requests fine
 const requestQueue = [];
 
 // ── Cache version: bump this to invalidate all stored posters ────────────────
-const POSTER_VERSION = "v6";
+const POSTER_VERSION = "v7";
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -173,10 +173,10 @@ async function generateWithFal(title, year, type) {
 
   activeRequests++;
   try {
-    console.log(`[AI Poster] fal.ai flux/dev request: "${title}" (style ${styleIndex})`);
+    console.log(`[AI Poster] fal.ai flux/schnell request: "${title}" (style ${styleIndex})`);
 
     // Submit to flux/dev — much higher quality than schnell
-    const submitRes = await fetch("https://queue.fal.run/fal-ai/flux/dev", {
+    const submitRes = await fetch("https://queue.fal.run/fal-ai/flux/schnell", {
       method: "POST",
       headers: {
         "Authorization": `Key ${process.env.FAL_API_KEY}`,
@@ -185,8 +185,7 @@ async function generateWithFal(title, year, type) {
       body: JSON.stringify({
         prompt,
         image_size: { width: 512, height: 768 },
-        num_inference_steps: 28,
-        guidance_scale: 3.5,
+        num_inference_steps: 4,
         seed,
         num_images: 1,
         enable_safety_checker: false
@@ -204,7 +203,7 @@ async function generateWithFal(title, year, type) {
     // Poll for result
     for (let i = 0; i < 90; i++) {
       await sleep(2000);
-      const statusRes = await fetch(`https://queue.fal.run/fal-ai/flux/dev/requests/${request_id}`, {
+      const statusRes = await fetch(`https://queue.fal.run/fal-ai/flux/schnell/requests/${request_id}`, {
         headers: { "Authorization": `Key ${process.env.FAL_API_KEY}` }
       });
       if (!statusRes.ok) continue;
