@@ -136,38 +136,18 @@ async function uploadToB2(key, buffer) {
   }));
 }
 
-async function generateWithFal(title, year, type) {
-  const FAL_KEY = process.env.FAL_API_KEY;
-  if (!FAL_KEY) throw new Error("FAL_API_KEY not set");
-
+async function generateWithPollinations(title, year, type) {
   const prompt = `vintage alternative movie poster illustration, bold black ink outlines, flat colors, limited palette yellow red black white, collage of multiple characters, screen print style, Joshua Budich art style, retro typography at bottom, no photorealism, graphic novel aesthetic, portrait orientation, title: "${title}"${year ? ` (${year})` : ""}, ${type === "series" ? "TV series" : "film"}`;
+
+  const seed = Math.abs([...(title || "x")].reduce((a, c) => a + c.charCodeAt(0), 0));
+  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=512&height=768&seed=${seed}&nologo=true&model=flux`;
 
   activeRequests++;
   try {
-    const falRes = await fetch("https://fal.run/fal-ai/flux/dev", {
-      method: "POST",
-      headers: {
-        "Authorization": `Key ${FAL_KEY}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        prompt,
-        image_size: { width: 512, height: 768 },
-        num_inference_steps: 28,
-        guidance_scale: 3.5,
-        num_images: 1,
-        enable_safety_checker: false
-      })
-    });
-
-    if (!falRes.ok) throw new Error(`fal.ai ${falRes.status}`);
-    const data = await falRes.json();
-    const imageUrl = data?.images?.[0]?.url;
-    if (!imageUrl) throw new Error("No image URL");
-
-    const imgRes = await fetch(imageUrl);
-    if (!imgRes.ok) throw new Error(`Image fetch ${imgRes.status}`);
-    return await imgRes.buffer();
+    console.log(`[AI Poster] Pollinations request: "${title}"`);
+    const res = await fetch(url, { timeout: 60000 });
+    if (!res.ok) throw new Error(`Pollinations ${res.status}`);
+    return await res.buffer();
   } finally {
     activeRequests--;
     processQueue();
@@ -183,7 +163,7 @@ async function prewarmPoster(title, year, type) {
   const promise = new Promise((resolve, reject) => {
     const task = async () => {
       try {
-        const buf = await generateWithFal(title, year, type);
+        const buf = await generateWithPollinations(title, year, type);
         await uploadToB2(key, buf);
         console.log(`[AI Poster] Stored in B2: ${key}`);
         resolve();
@@ -224,12 +204,6 @@ app.get("/ai-poster", async (req, res) => {
   }
 
   // 2. Generate, upload to B2, then serve
-  const FAL_KEY = process.env.FAL_API_KEY;
-  if (!FAL_KEY) {
-    if (fallback) return res.redirect(fallback);
-    return res.status(500).send("No API key");
-  }
-
   // Deduplicate concurrent requests for same poster
   if (AI_PENDING.has(key)) {
     try {
@@ -246,7 +220,7 @@ app.get("/ai-poster", async (req, res) => {
   const promise = new Promise((resolve, reject) => {
     const task = async () => {
       try {
-        const buf = await generateWithFal(title, year, type);
+        const buf = await generateWithPollinations(title, year, type);
         await uploadToB2(key, buf);
         console.log(`[AI Poster] Done + stored: ${key}`);
         resolve();
