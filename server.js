@@ -103,11 +103,11 @@ const B2_PUBLIC = `https://f2d571efe5e4.s3.us-east-005.backblazeb2.com/${B2_BUCK
 
 const AI_PENDING = new Map();
 let activeRequests = 0;
-const MAX_CONCURRENT = 1;   // Pollinations 530 = rate limit — keep at 1
+const MAX_CONCURRENT = 5;   // fal.ai handles concurrent requests fine
 const requestQueue = [];
 
 // ── Cache version: bump this to invalidate all stored posters ────────────────
-const POSTER_VERSION = "v4";
+const POSTER_VERSION = "v5";
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -144,50 +144,87 @@ async function uploadToB2(key, buffer) {
   }));
 }
 
-async function generateWithPollinations(title, year, type) {
+async function generateWithFal(title, year, type) {
+  // Style pool — picked deterministically per title for consistency
   const styles = [
-    `dramatic 1950s pulp fiction painted movie poster, oil painting style, rich deep colors, moody cinematic lighting, detailed faces, action scene, bold vintage typography`,
-    `classic Hollywood golden age 1940s movie poster, painterly illustration, warm amber and crimson tones, glamorous noir composition, art deco lettering, cinematic drama`,
-    `1960s Italian cinema poster style, painted illustration, vibrant saturated colors, dramatic shadows, expressive characters, vintage European film aesthetic`,
-    `1970s grindhouse exploitation movie poster, painted art, high contrast dramatic colors, gritty cinematic composition, bold retro title typography, intense action`,
-    `vintage 1950s adventure pulp magazine cover, richly painted illustration, vivid blues reds and golds, heroic characters, dynamic composition, retro typography`
+    `1950s pulp fiction painted movie poster, dramatic oil painting, rich saturated reds oranges yellows, moody noir shadows, detailed expressive faces, action composition, bold vintage serif title at bottom`,
+    `classic Hollywood golden age 1940s painted movie poster, warm amber crimson ivory palette, glamorous characters, dramatic lighting, art deco typography, cinematic grandeur`,
+    `1960s Italian spaghetti western cinema poster, painterly illustration, vivid earthy tones, intense close-up faces, dust and drama, bold condensed title typography`,
+    `1970s grindhouse exploitation painted poster, high contrast deep colors, gritty urban scene, intense action, worn texture, large bold retro title, illustrated not photographic`,
+    `vintage 1950s pulp magazine adventure cover, richly painted illustration, vivid blues reds golds, heroic figures in dynamic pose, retro typography, painted not CGI`
   ];
 
   const styleIndex = Math.abs([...(title || "x")].reduce((a, c) => a + c.charCodeAt(0), 0)) % styles.length;
   const chosenStyle = styles[styleIndex];
 
-  const prompt = `${chosenStyle}, movie poster for "${title}"${year ? ` (${year})` : ""}, ${type === "series" ? "TV series" : "film"}, portrait orientation 2:3, highly detailed painted illustration, NOT flat design, NOT minimalist, NOT yellow background only, rich colors, cinematic quality`;
+  const prompt = [
+    chosenStyle,
+    `movie poster for the ${type === "series" ? "TV series" : "film"} "${title}"${year ? ` (${year})` : ""}`,
+    `portrait orientation 2:3 ratio`,
+    `highly detailed hand-painted illustration style`,
+    `dramatic cinematic composition with characters`,
+    `vintage tagline text at bottom`,
+    `professional movie poster layout`,
+    `no photorealism, no CGI look, no modern digital art aesthetic`,
+    `rich deep colors, strong contrast, painterly texture`
+  ].join(", ");
 
   const seed = Math.abs([...(title || "x")].reduce((a, c) => a + c.charCodeAt(0), 0));
-  // flux-realism produces richer more cinematic results than base flux
-  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=512&height=768&seed=${seed}&nologo=true&model=flux-realism`;
 
   activeRequests++;
   try {
-    const MAX_RETRIES = 5;
-    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-      console.log(`[AI Poster] Pollinations request: "${title}" (style ${styleIndex}, attempt ${attempt})`);
-      try {
-        const res = await fetch(url, { timeout: 120000 });
-        if (res.status === 530 || res.status === 429) {
-          const delay = attempt * 8000;
-          console.warn(`[AI Poster] Rate limited (${res.status}), retrying in ${delay}ms...`);
-          await sleep(delay);
-          continue;
-        }
-        if (!res.ok) throw new Error(`Pollinations ${res.status}`);
-        return await res.buffer();
-      } catch (err) {
-        if (attempt === MAX_RETRIES) throw err;
-        const delay = attempt * 8000;
-        console.warn(`[AI Poster] Error, retrying in ${delay}ms: ${err.message}`);
-        await sleep(delay);
-      }
+    console.log(`[AI Poster] fal.ai flux/dev request: "${title}" (style ${styleIndex})`);
+
+    // Submit to flux/dev — much higher quality than schnell
+    const submitRes = await fetch("https://queue.fal.run/fal-ai/flux/dev", {
+      method: "POST",
+      headers: {
+        "Authorization": `Key ${process.env.FAL_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        prompt,
+        image_size: { width: 512, height: 768 },
+        num_inference_steps: 28,
+        guidance_scale: 3.5,
+        seed,
+        num_images: 1,
+        enable_safety_checker: false
+      })
+    });
+
+    if (!submitRes.ok) {
+      const txt = await submitRes.text();
+      throw new Error(`fal.ai submit failed ${submitRes.status}: ${txt}`);
     }
-    throw new Error(`Pollinations failed after ${MAX_RETRIES} attempts`);
+
+    const { request_id } = await submitRes.json();
+    console.log(`[AI Poster] fal.ai queued: ${request_id}`);
+
+    // Poll for result
+    for (let i = 0; i < 90; i++) {
+      await sleep(2000);
+      const statusRes = await fetch(`https://queue.fal.run/fal-ai/flux/dev/requests/${request_id}`, {
+        headers: { "Authorization": `Key ${process.env.FAL_API_KEY}` }
+      });
+      if (!statusRes.ok) continue;
+      const result = await statusRes.json();
+
+      if (result.status === "COMPLETED" || result.images) {
+        const imageUrl = result.images?.[0]?.url || result.image?.url;
+        if (!imageUrl) throw new Error("fal.ai: no image in response");
+        console.log(`[AI Poster] fal.ai done: "${title}"`);
+        const imgRes = await fetch(imageUrl);
+        if (!imgRes.ok) throw new Error(`Image download failed: ${imgRes.status}`);
+        return await imgRes.buffer();
+      }
+
+      if (result.status === "FAILED") throw new Error(`fal.ai job failed: ${JSON.stringify(result)}`);
+    }
+
+    throw new Error("fal.ai: timed out waiting for result");
   } finally {
     activeRequests--;
-    await sleep(2000); // small gap between requests
     processQueue();
   }
 }
@@ -201,7 +238,7 @@ async function prewarmPoster(title, year, type) {
   const promise = new Promise((resolve, reject) => {
     const task = async () => {
       try {
-        const buf = await generateWithPollinations(title, year, type);
+        const buf = await generateWithFal(title, year, type);
         await uploadToB2(key, buf);
         console.log(`[AI Poster] Stored in B2: ${key}`);
         resolve();
@@ -257,7 +294,7 @@ app.get("/ai-poster", async (req, res) => {
   const promise = new Promise((resolve, reject) => {
     const task = async () => {
       try {
-        const buf = await generateWithPollinations(title, year, type);
+        const buf = await generateWithFal(title, year, type);
         await uploadToB2(key, buf);
         console.log(`[AI Poster] Done + stored: ${key}`);
         resolve();
