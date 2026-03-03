@@ -66,4 +66,4 @@ async function fetchCatalog(catalogId, type, skip = 0, baseUrl) {
   return metas;
 }
 
-module.exports = { fetchCatalog, tmdbToStremio, getPosterUrl };
+module.exports = { fetchCatalog, tmdbToStremio };
