@@ -121,13 +121,12 @@ app.get("/ai-poster", async (req, res) => {
 
 // ─── Catalog ──────────────────────────────────────────────────────────────────
 
-app.get("/:config/catalog/:type/:id/:extra?.json", async (req, res) => {
+// Catalog - with or without config prefix
+async function handleCatalog(req, res) {
   const { type, id } = req.params;
-  const config = getUserConfig(req);
   const baseUrl = getBaseUrl(req);
   const skip = parseInt(req.query.skip || "0");
-
-  console.log(`[Catalog] Request: type=${type} id=${id} skip=${skip} retro=${config.retro}`);
+  console.log(`[Catalog] type=${type} id=${id} skip=${skip}`);
   try {
     const metas = await fetchCatalog(id, type, skip, baseUrl);
     res.json({ metas });
@@ -135,13 +134,15 @@ app.get("/:config/catalog/:type/:id/:extra?.json", async (req, res) => {
     console.error(`[Catalog] Error: ${err.message}`);
     res.json({ metas: [] });
   }
-});
+}
+app.get("/catalog/:type/:id/:extra?.json", handleCatalog);
+app.get("/:config/catalog/:type/:id/:extra?.json", handleCatalog);
 
 // ─── Meta ─────────────────────────────────────────────────────────────────────
 
-app.get("/:config/meta/:type/:id.json", async (req, res) => {
+async function handleMeta(req, res) {
   const { type, id } = req.params;
-  console.log(`[Meta] Request: type=${type} id=${id}`);
+  console.log(`[Meta] type=${type} id=${id}`);
   try {
     const meta = await fetchMeta(id, type);
     if (!meta) return res.json({ meta: null });
@@ -150,13 +151,15 @@ app.get("/:config/meta/:type/:id.json", async (req, res) => {
     console.error(`[Meta] Error: ${err.message}`);
     res.json({ meta: null });
   }
-});
+}
+app.get("/meta/:type/:id.json", handleMeta);
+app.get("/:config/meta/:type/:id.json", handleMeta);
 
 // ─── Stream ───────────────────────────────────────────────────────────────────
 
-app.get("/:config/stream/:type/:id.json", async (req, res) => {
+async function handleStream(req, res) {
   const { type, id } = req.params;
-  console.log(`[Stream] Request: type=${type} id=${id}`);
+  console.log(`[Stream] type=${type} id=${id}`);
   try {
     const streams = await fetchStreams(id, type);
     res.json({ streams: streams || [] });
@@ -164,7 +167,9 @@ app.get("/:config/stream/:type/:id.json", async (req, res) => {
     console.error(`[Stream] Error: ${err.message}`);
     res.json({ streams: [] });
   }
-});
+}
+app.get("/stream/:type/:id.json", handleStream);
+app.get("/:config/stream/:type/:id.json", handleStream);
 
 // ─── Root redirect ────────────────────────────────────────────────────────────
 
