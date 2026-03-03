@@ -107,7 +107,7 @@ const MAX_CONCURRENT = 3;
 const requestQueue = [];
 
 // ── Cache version: bump this to invalidate all stored posters ────────────────
-const POSTER_VERSION = "v3";
+const POSTER_VERSION = "v4";
 
 function processQueue() {
   while (requestQueue.length > 0 && activeRequests < MAX_CONCURRENT) {
@@ -141,23 +141,22 @@ async function uploadToB2(key, buffer) {
 }
 
 async function generateWithPollinations(title, year, type) {
-  // Randomly pick one of several pulp/vintage styles for variety
   const styles = [
-    `vintage pulp fiction magazine cover, 1950s painted illustration, dramatic noir lighting, rich saturated colors, bold dramatic serif title font, action composition, beautiful characters, painted not photographic`,
-    `1940s Hollywood golden age movie poster, painted illustration, dramatic shadows, vivid warm colors, glamorous characters, retro typography, cinematic composition, art deco elements`,
-    `retro paperback novel cover art, 1960s illustration style, pulp fiction aesthetic, dramatic scene, bold colors, vintage typography, painted artwork`,
-    `vintage exploitation movie poster, 1970s grindhouse style, illustrated not photographic, bold colors, dramatic action scene, retro font, gritty cinematic feel`,
-    `classic 1950s sci-fi pulp magazine cover, dramatic illustration, vivid colors, retro futurism, bold title text, painted artwork, vintage poster aesthetic`
+    `dramatic 1950s pulp fiction painted movie poster, oil painting style, rich deep colors, moody cinematic lighting, detailed faces, action scene, bold vintage typography`,
+    `classic Hollywood golden age 1940s movie poster, painterly illustration, warm amber and crimson tones, glamorous noir composition, art deco lettering, cinematic drama`,
+    `1960s Italian cinema poster style, painted illustration, vibrant saturated colors, dramatic shadows, expressive characters, vintage European film aesthetic`,
+    `1970s grindhouse exploitation movie poster, painted art, high contrast dramatic colors, gritty cinematic composition, bold retro title typography, intense action`,
+    `vintage 1950s adventure pulp magazine cover, richly painted illustration, vivid blues reds and golds, heroic characters, dynamic composition, retro typography`
   ];
 
-  // Pick style deterministically based on title so same movie always gets same style
   const styleIndex = Math.abs([...(title || "x")].reduce((a, c) => a + c.charCodeAt(0), 0)) % styles.length;
   const chosenStyle = styles[styleIndex];
 
-  const prompt = `${chosenStyle}, movie poster for "${title}"${year ? ` (${year})` : ""}, ${type === "series" ? "TV series" : "film"}, portrait orientation, no modern CGI look, no photorealism, illustrated poster art only`;
+  const prompt = `${chosenStyle}, movie poster for "${title}"${year ? ` (${year})` : ""}, ${type === "series" ? "TV series" : "film"}, portrait orientation 2:3, highly detailed painted illustration, NOT flat design, NOT minimalist, NOT yellow background only, rich colors, cinematic quality`;
 
   const seed = Math.abs([...(title || "x")].reduce((a, c) => a + c.charCodeAt(0), 0));
-  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=512&height=768&seed=${seed}&nologo=true&model=flux`;
+  // flux-realism produces richer more cinematic results than base flux
+  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=512&height=768&seed=${seed}&nologo=true&model=flux-realism`;
 
   activeRequests++;
   try {
