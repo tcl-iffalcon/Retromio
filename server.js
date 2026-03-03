@@ -107,7 +107,7 @@ const MAX_CONCURRENT = 2;   // fal.ai free tier limit is 2 concurrent
 const requestQueue = [];
 
 // ── Cache version: bump this to invalidate all stored posters ────────────────
-const POSTER_VERSION = "v10";
+const POSTER_VERSION = "v11";
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -212,7 +212,7 @@ async function generateWithFal(title, year, type, genreIds, overview) {
     console.log(`[AI Poster] HuggingFace request: "${title}" (genre: ${styleLabel})`);
 
     const hfRes = await fetch(
-      "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell",
+      "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell",
       {
         method: "POST",
         headers: {
