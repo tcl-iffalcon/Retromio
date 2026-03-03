@@ -85,7 +85,9 @@ app.get("/manifest.json", (req, res) => {
   res.json(baseManifest);
 });
 
-// ─── AI Poster (Pollinations.AI — free, no key needed) ──────────────────────
+// ─── AI Poster via fal.ai ───────────────────────────────────────────────────
+
+const AI_CACHE = new Map(); // in-memory cache
 
 app.get("/ai-poster", async (req, res) => {
   const { title, year, type } = req.query;
@@ -96,28 +98,70 @@ app.get("/ai-poster", async (req, res) => {
     return res.status(400).send("Missing title");
   }
 
-  // Prompt tuned to match bold ink illustration / screen print style
-  const prompt = `alternative movie poster illustration art, bold black ink outlines, flat colors, limited palette yellow red black white cream, collage composition, screen print style, retro typography, graphic novel aesthetic, no photorealism, portrait orientation, title: "${title}"${year ? ` (${year})` : ""}, ${type === "series" ? "TV series" : "film"}`;
+  const cacheKey = `${title}_${year}`;
+  if (AI_CACHE.has(cacheKey)) {
+    console.log(`[AI Poster] Cache hit: "${title}"`);
+    const cached = AI_CACHE.get(cacheKey);
+    res.set("Content-Type", "image/jpeg");
+    res.set("Cache-Control", "public, max-age=604800");
+    return res.send(cached);
+  }
 
-  const seed = Math.abs([...title].reduce((a, c) => a + c.charCodeAt(0), 0));
-  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=400&height=600&seed=${seed}&nologo=true&model=flux`;
+  const FAL_KEY = process.env.FAL_API_KEY;
+  if (!FAL_KEY) {
+    console.error("[AI Poster] FAL_API_KEY not set");
+    if (fallback) return res.redirect(fallback);
+    return res.status(500).send("No API key");
+  }
 
-  console.log(`[AI Poster] Generating: "${title}" seed=${seed}`);
+  const prompt = `alternative movie poster illustration, bold black ink outlines, flat colors, limited palette yellow red black white cream, screen print style, retro typography, graphic novel aesthetic, no photorealism, portrait orientation, title text: "${title}"${year ? ` (${year})` : ""}, ${type === "series" ? "TV series" : "film"}`;
+
+  console.log(`[AI Poster] Generating via fal.ai: "${title}"`);
 
   try {
-    const response = await fetch(url, { timeout: 30000 });
-    if (!response.ok) throw new Error(`Pollinations ${response.status}`);
-    const buffer = await response.buffer();
-    res.set("Content-Type", response.headers.get("content-type") || "image/jpeg");
+    const falRes = await fetch("https://fal.run/fal-ai/flux/schnell", {
+      method: "POST",
+      headers: {
+        "Authorization": `Key ${FAL_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        prompt,
+        image_size: { width: 400, height: 600 },
+        num_inference_steps: 4,
+        num_images: 1,
+        enable_safety_checker: false
+      }),
+      timeout: 30000
+    });
+
+    if (!falRes.ok) {
+      const errText = await falRes.text();
+      throw new Error(`fal.ai ${falRes.status}: ${errText.slice(0, 100)}`);
+    }
+
+    const data = await falRes.json();
+    const imageUrl = data?.images?.[0]?.url;
+    if (!imageUrl) throw new Error("No image URL in fal.ai response");
+
+    // Fetch the actual image
+    const imgRes = await fetch(imageUrl);
+    if (!imgRes.ok) throw new Error(`Image fetch failed: ${imgRes.status}`);
+    const buffer = await imgRes.buffer();
+
+    AI_CACHE.set(cacheKey, buffer);
+    console.log(`[AI Poster] Success: "${title}" (${buffer.length} bytes)`);
+
+    res.set("Content-Type", "image/jpeg");
     res.set("Cache-Control", "public, max-age=604800");
     res.send(buffer);
+
   } catch (err) {
     console.error(`[AI Poster] Error: ${err.message}`);
     if (fallback) return res.redirect(fallback);
     res.status(500).send("Failed");
   }
 });
-
 
 // ─── Catalog ──────────────────────────────────────────────────────────────────
 
