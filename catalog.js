@@ -63,6 +63,15 @@ async function fetchCatalog(catalogId, type, skip = 0, baseUrl) {
     .map(item => tmdbToStremio(item, tmdbType, baseUrl));
 
   console.log(`[Catalog] ${catalogId} skip=${skip} → ${metas.length} results`);
+
+  // Prewarm B2: trigger poster generation in background for items not yet cached
+  metas.forEach(meta => {
+    const url = meta.poster;
+    if (url && url.includes("/ai-poster?")) {
+      fetch(url).catch(() => {}); // fire and forget
+    }
+  });
+
   return metas;
 }
 
