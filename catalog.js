@@ -10,12 +10,13 @@ function getAiPosterUrl(baseUrl, item, type) {
   const releaseDate = isMovie ? item.release_date : item.first_air_date;
   const year = releaseDate ? releaseDate.substring(0, 4) : "";
 
-  const prompt = `alternative movie poster illustration art, bold black ink outlines, flat colors, limited palette yellow red black white cream, collage composition, screen print style, retro typography, graphic novel aesthetic, no photorealism, portrait orientation, title: "${title}"${year ? ` (${year})` : ""}, ${isMovie ? "film" : "TV series"}`;
-
-  const seed = Math.abs([...( title || "x")].reduce((a, c) => a + c.charCodeAt(0), 0));
-
-  // Return Pollinations URL directly — no proxy, client fetches it
-  return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=400&height=600&seed=${seed}&nologo=true&model=flux`;
+  const params = new URLSearchParams({
+    title: title || "",
+    year: year || "",
+    type: isMovie ? "movie" : "series",
+    fallback: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : ""
+  });
+  return `${baseUrl}/ai-poster?${params.toString()}`;
 }
 
 function tmdbToStremio(item, type, baseUrl) {
