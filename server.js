@@ -107,7 +107,7 @@ const MAX_CONCURRENT = 5;   // fal.ai handles concurrent requests fine
 const requestQueue = [];
 
 // ── Cache version: bump this to invalidate all stored posters ────────────────
-const POSTER_VERSION = "v5";
+const POSTER_VERSION = "v6";
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
