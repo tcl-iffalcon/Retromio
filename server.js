@@ -49,150 +49,66 @@ app.get("/configure", (req, res) => {
     body {
       background: #0a0a0f;
       color: #e8e0d5;
-      font-family: 'Georgia', serif;
+      font-family: Georgia, serif;
       min-height: 100vh;
       display: flex;
       align-items: center;
       justify-content: center;
       padding: 2rem;
     }
-    .container {
-      max-width: 520px;
-      width: 100%;
-    }
-    .logo {
-      text-align: center;
-      margin-bottom: 2.5rem;
-    }
-    .logo img {
-      width: 72px;
-      height: 72px;
-      margin-bottom: 1rem;
-      filter: sepia(0.3);
-    }
-    h1 {
-      font-size: 2rem;
-      letter-spacing: 0.15em;
-      text-transform: uppercase;
-      color: #c9a84c;
-      text-align: center;
-    }
-    .tagline {
-      text-align: center;
-      color: #7a6e60;
-      font-style: italic;
-      margin-top: 0.4rem;
-      font-size: 0.9rem;
-    }
-    .card {
-      background: #13131a;
-      border: 1px solid #2a2520;
-      border-radius: 8px;
-      padding: 2rem;
-      margin-top: 2rem;
-    }
-    .option-label {
-      font-size: 1rem;
-      color: #c9a84c;
-      margin-bottom: 1rem;
-      display: block;
-      letter-spacing: 0.05em;
-    }
-    .poster-options {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 1rem;
-      margin-bottom: 2rem;
-    }
-    .poster-option {
+    .container { max-width: 540px; width: 100%; }
+    .logo { text-align: center; margin-bottom: 2.5rem; }
+    .logo img { width: 72px; height: 72px; margin-bottom: 1rem; filter: sepia(0.3); }
+    h1 { font-size: 2rem; letter-spacing: .15em; text-transform: uppercase; color: #c9a84c; text-align: center; }
+    .tagline { text-align: center; color: #7a6e60; font-style: italic; margin-top: .4rem; font-size: .9rem; }
+    .card { background: #13131a; border: 1px solid #2a2520; border-radius: 8px; padding: 2rem; margin-top: 2rem; }
+    .section-label { font-size: .9rem; color: #c9a84c; margin-bottom: 1rem; display: block; letter-spacing: .05em; }
+    .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; margin-bottom: 1.5rem; }
+    .opt {
       border: 2px solid #2a2520;
       border-radius: 6px;
-      padding: 1rem;
+      padding: .85rem;
       cursor: pointer;
       text-align: center;
-      transition: all 0.2s;
       background: #0d0d12;
+      transition: border-color .2s;
+      user-select: none;
     }
-    .poster-option:hover { border-color: #c9a84c; }
-    .poster-option.selected {
-      border-color: #c9a84c;
-      background: #1a1508;
+    .opt:hover { border-color: #7a6a40; }
+    .opt.active { border-color: #c9a84c; background: #1a1508; }
+    .opt .preview {
+      width: 100%; aspect-ratio: 3/2;
+      border-radius: 4px; margin-bottom: .6rem;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.8rem; overflow: hidden;
     }
-    .poster-option .preview {
-      width: 100%;
-      height: 120px;
-      border-radius: 4px;
-      margin-bottom: 0.75rem;
-      background: #1e1e28;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 2rem;
-      overflow: hidden;
-      position: relative;
-    }
-    .preview-original {
-      background: linear-gradient(135deg, #1a2a4a, #2a1a3a);
-    }
-    .preview-retro {
-      background: linear-gradient(135deg, #3d2b1f, #1f1a0f);
-      filter: sepia(0.8) contrast(1.1) saturate(0.7);
-    }
-    .poster-option .name {
-      font-size: 0.85rem;
-      color: #e8e0d5;
-      letter-spacing: 0.05em;
-    }
-    .poster-option .desc {
-      font-size: 0.75rem;
-      color: #5a5248;
-      margin-top: 0.25rem;
-    }
+    .prev-orig { background: linear-gradient(135deg,#1a2a4a,#2a1a3a); }
+    .prev-retro { background: linear-gradient(135deg,#3d2b1f,#1f1a0f); filter: sepia(.8) contrast(1.1); }
+    .prev-ai { background: linear-gradient(135deg,#1a0a2e,#0a1a2e); }
+    .opt .name { font-size: .85rem; color: #e8e0d5; letter-spacing: .05em; }
+    .opt .desc { font-size: .72rem; color: #5a5248; margin-top: .2rem; }
+    #aiSection { display: none; }
     .install-btn {
-      width: 100%;
-      padding: 1rem;
-      background: #c9a84c;
-      color: #0a0a0f;
-      border: none;
-      border-radius: 6px;
-      font-size: 1rem;
-      font-family: 'Georgia', serif;
-      font-weight: bold;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      cursor: pointer;
-      transition: background 0.2s;
+      width: 100%; padding: 1rem;
+      background: #c9a84c; color: #0a0a0f;
+      border: none; border-radius: 6px;
+      font-size: 1rem; font-family: Georgia, serif;
+      font-weight: bold; letter-spacing: .1em;
+      text-transform: uppercase; cursor: pointer;
+      transition: background .2s;
     }
     .install-btn:hover { background: #e0bc5a; }
     .install-url {
-      margin-top: 1rem;
-      padding: 0.75rem 1rem;
-      background: #0d0d12;
-      border: 1px solid #2a2520;
-      border-radius: 6px;
-      font-size: 0.8rem;
-      color: #7a6e60;
-      word-break: break-all;
-      display: none;
+      margin-top: 1rem; padding: .75rem 1rem;
+      background: #0d0d12; border: 1px solid #2a2520;
+      border-radius: 6px; font-size: .75rem; color: #7a6e60;
+      word-break: break-all; display: none;
     }
-    .divider {
-      border: none;
-      border-top: 1px solid #2a2520;
-      margin: 1.5rem 0;
-    }
-    .providers {
-      display: flex;
-      gap: 0.75rem;
-      justify-content: center;
-    }
-    .provider-badge {
-      padding: 0.3rem 0.75rem;
-      border: 1px solid #2a2520;
-      border-radius: 20px;
-      font-size: 0.75rem;
-      color: #7a6e60;
-      letter-spacing: 0.05em;
-    }
+    .divider { border: none; border-top: 1px solid #2a2520; margin: 1.5rem 0; }
+    .providers { display: flex; gap: .75rem; justify-content: center; }
+    .badge { padding: .3rem .75rem; border: 1px solid #2a2520; border-radius: 20px; font-size: .75rem; color: #7a6e60; }
+    .ai-note { font-size: .7rem; color: #5a5248; margin-top: .5rem; }
   </style>
 </head>
 <body>
@@ -202,105 +118,95 @@ app.get("/configure", (req, res) => {
       <h1>Retromio</h1>
       <p class="tagline">Vintage cinema, modern streams</p>
     </div>
-
     <div class="card">
-      <span class="option-label">🎞 Poster Style</span>
-      <div class="poster-options" style="grid-template-columns: 1fr 1fr 1fr;">
-        <div class="poster-option style-option selected" onclick="selectStyle('original', this)">
-          <div class="preview preview-original">🎬</div>
+      <span class="section-label">🎞 Poster Style</span>
+      <div class="grid3">
+        <div class="opt active" id="opt-original" onclick="pick('original')">
+          <div class="preview prev-orig">🎬</div>
           <div class="name">Original</div>
-          <div class="desc">TMDB posters as-is</div>
+          <div class="desc">TMDB posters</div>
         </div>
-        <div class="poster-option style-option" onclick="selectStyle('retro', this)">
-          <div class="preview preview-retro">🎞</div>
+        <div class="opt" id="opt-retro" onclick="pick('retro')">
+          <div class="preview prev-retro">🎞</div>
           <div class="name">Retro Filter</div>
-          <div class="desc">Vintage film aesthetic</div>
+          <div class="desc">Vintage aesthetic</div>
         </div>
-        <div class="poster-option style-option" onclick="selectStyle('ai', this)">
-          <div class="preview" style="background:linear-gradient(135deg,#1a0a2e,#0a1a2e);font-size:2rem;">✦</div>
+        <div class="opt" id="opt-ai" onclick="pick('ai')">
+          <div class="preview prev-ai">✦</div>
           <div class="name">AI Poster</div>
-          <div class="desc">Marquee-style retro art</div>
+          <div class="desc">Marquee-style art</div>
         </div>
       </div>
-      <div id="aiStyleSection" style="display:none; margin-bottom:1.5rem;">
-        <span class="option-label" style="margin-bottom:0.75rem; display:block;">✦ AI Art Style</span>
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.6rem;">
-          <div class="poster-option ai-style-option selected" id="aiStyle_pulp" onclick="selectAiStyle('pulp', this)">
+
+      <div id="aiSection">
+        <span class="section-label">✦ AI Art Style</span>
+        <div class="grid2">
+          <div class="opt active" id="ai-pulp" onclick="pickAi('pulp')">
             <div class="name">Pulp Fiction</div>
             <div class="desc">1950s noir illustration</div>
           </div>
-          <div class="poster-option ai-style-option" id="aiStyle_comic" onclick="selectAiStyle('comic', this)">
+          <div class="opt" id="ai-comic" onclick="pickAi('comic')">
             <div class="name">Comic Book</div>
-            <div class="desc">Bold ink, halftone dots</div>
+            <div class="desc">Bold ink, halftone</div>
           </div>
-          <div class="poster-option ai-style-option" id="aiStyle_soviet" onclick="selectAiStyle('soviet', this)">
+          <div class="opt" id="ai-soviet" onclick="pickAi('soviet')">
             <div class="name">Constructivist</div>
-            <div class="desc">Soviet propaganda style</div>
+            <div class="desc">Soviet poster style</div>
           </div>
-          <div class="poster-option ai-style-option" id="aiStyle_neon" onclick="selectAiStyle('neon', this)">
+          <div class="opt" id="ai-neon" onclick="pickAi('neon')">
             <div class="name">Synthwave</div>
-            <div class="desc">80s neon retrofuturism</div>
+            <div class="desc">80s neon retro</div>
           </div>
         </div>
-        <p style="font-size:0.7rem;color:#5a5248;margin-top:0.75rem;">⚠ İlk yüklemede 5-10 sn gecikme olabilir. Posterler 7 gün önbelleklenir.</p>
+        <p class="ai-note">⚠ İlk yüklemede 5-10 sn gecikme olabilir. Posterler 7 gün önbelleklenir.</p>
       </div>
 
-      <button class="install-btn" id="installBtn" onclick="install()">
-        📺 Install to Stremio
-      </button>
+      <button class="install-btn" onclick="install()">📺 Install to Stremio</button>
       <div class="install-url" id="installUrl"></div>
-
       <hr class="divider">
       <div class="providers">
-        <span class="provider-badge">Vidlink</span>
-        <span class="provider-badge">NetMirror</span>
-        <span class="provider-badge">TMDB</span>
+        <span class="badge">Vidlink</span>
+        <span class="badge">NetMirror</span>
+        <span class="badge">TMDB</span>
       </div>
     </div>
   </div>
-
   <script>
-    let selectedStyle = 'original';
-    let selectedAiStyle = 'pulp';
-    const BASE_URL = '${baseUrl}';
+    var style = 'original';
+    var aiStyle = 'pulp';
+    var BASE = '${baseUrl}';
 
-    function selectStyle(style, el) {
-      selectedStyle = style;
-      document.querySelectorAll('.style-option').forEach(o => o.classList.remove('selected'));
-      el.classList.add('selected');
-      document.getElementById('aiStyleSection').style.display = style === 'ai' ? 'block' : 'none';
-      document.getElementById('installBtn').disabled = false;
+    function pick(s) {
+      style = s;
+      ['original','retro','ai'].forEach(function(id) {
+        document.getElementById('opt-' + id).classList.remove('active');
+      });
+      document.getElementById('opt-' + s).classList.add('active');
+      document.getElementById('aiSection').style.display = s === 'ai' ? 'block' : 'none';
     }
 
-    function selectAiStyle(style, el) {
-      selectedAiStyle = style;
-      document.querySelectorAll('.ai-style-option').forEach(o => o.classList.remove('selected'));
-      el.classList.add('selected');
-    }
-
-    function getManifestUrl() {
-      const config = {
-        retro: selectedStyle === 'retro',
-        ai: selectedStyle === 'ai',
-        aiStyle: selectedAiStyle
-      };
-      const encoded = btoa(JSON.stringify(config));
-      return BASE_URL + '/' + encoded + '/manifest.json';
+    function pickAi(s) {
+      aiStyle = s;
+      ['pulp','comic','soviet','neon'].forEach(function(id) {
+        document.getElementById('ai-' + id).classList.remove('active');
+      });
+      document.getElementById('ai-' + s).classList.add('active');
     }
 
     function install() {
-      const url = getManifestUrl();
-      const stremioUrl = 'stremio://' + url.replace(/^https?:\/\//, '');
-      const urlDiv = document.getElementById('installUrl');
-      urlDiv.style.display = 'block';
-      urlDiv.textContent = url;
+      var config = { retro: style === 'retro', ai: style === 'ai', aiStyle: aiStyle };
+      var encoded = btoa(JSON.stringify(config));
+      var url = BASE + '/' + encoded + '/manifest.json';
+      var stremioUrl = 'stremio://' + url.replace(/^https?:\/\//, '');
+      var div = document.getElementById('installUrl');
+      div.style.display = 'block';
+      div.textContent = url;
       window.location.href = stremioUrl;
     }
   </script>
 </body>
 </html>`);
 });
-
 // ─── Manifest ────────────────────────────────────────────────────────────────
 
 app.get("/:config/manifest.json", (req, res) => {
