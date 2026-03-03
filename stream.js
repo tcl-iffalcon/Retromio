@@ -6,8 +6,7 @@ const TMDB_BASE = "https://api.themoviedb.org/3";
 // Polyfill fetch for providers
 global.fetch = fetch;
 
-const vidlink = require("../providers/vidlink.js");
-const netmirror = require("../providers/netmirror.js");
+const multisource = require("./providers/multisource.js");
 
 async function resolveTmdbId(id, type) {
   const isMovie = type === "movie";
@@ -46,23 +45,16 @@ async function fetchStreams(id, type, season, episode) {
 
   console.log(`[Stream] Fetching streams for TMDB ID: ${tmdbId}, type: ${mediaType}${seasonNum ? ` S${seasonNum}E${episodeNum}` : ""}`);
 
-  const [vidlinkStreams, netmirrorStreams] = await Promise.allSettled([
-    vidlink.getStreams(tmdbId, mediaType, seasonNum, episodeNum),
-    netmirror.getStreams(tmdbId, mediaType, seasonNum, episodeNum)
+  const result = await Promise.allSettled([
+    multisource.getStreams(tmdbId, mediaType, seasonNum, episodeNum)
   ]);
 
   const streams = [];
 
-  if (vidlinkStreams.status === "fulfilled" && vidlinkStreams.value) {
-    streams.push(...vidlinkStreams.value);
+  if (result[0].status === "fulfilled" && result[0].value) {
+    streams.push(...result[0].value);
   } else {
-    console.log(`[Stream] Vidlink failed: ${vidlinkStreams.reason?.message}`);
-  }
-
-  if (netmirrorStreams.status === "fulfilled" && netmirrorStreams.value) {
-    streams.push(...netmirrorStreams.value);
-  } else {
-    console.log(`[Stream] NetMirror failed: ${netmirrorStreams.reason?.message}`);
+    console.log(`[Stream] Multisource failed: ${result[0].reason?.message}`);
   }
 
   console.log(`[Stream] Total streams found: ${streams.length}`);
