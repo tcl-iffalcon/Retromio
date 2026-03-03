@@ -8,10 +8,14 @@ function getAiPosterUrl(baseUrl, item, type) {
   const title = isMovie ? item.title : item.name;
   const releaseDate = isMovie ? item.release_date : item.first_air_date;
   const year = releaseDate ? releaseDate.substring(0, 4) : "";
+  const genres = (item.genre_ids || []).slice(0, 3).join(",");
+  const overview = (item.overview || "").substring(0, 200);
   const params = new URLSearchParams({
     title: title || "",
     year: year || "",
     type: isMovie ? "movie" : "series",
+    genres: genres,
+    overview: overview,
     fallback: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : ""
   });
   return `${baseUrl}/ai-poster?${params.toString()}`;
