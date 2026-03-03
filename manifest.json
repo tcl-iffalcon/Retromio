@@ -28,18 +28,5 @@
       "contentLanguage": ["en"],
       "formats": ["m3u8"]
     },
-    {
-      "id": "retromio-streamflix",
-      "name": "Retromio StreamFlix",
-      "description": "StreamFlix film kaynağı",
-      "version": "1.0.0",
-      "author": "tcl-iffalcon",
-      "supportedTypes": ["movie"],
-      "filename": "providers/streamflix.js",
-      "enabled": true,
-      "logo": "https://img.icons8.com/fluency/96/retro-tv.png",
-      "contentLanguage": ["en"],
-      "formats": ["mp4", "m3u8"]
-    }
   ]
 }
