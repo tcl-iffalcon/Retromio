@@ -17,7 +17,9 @@ var __spreadValues = (a, b) => {
   return a;
 };
 var __spreadProps = (a, b) => __defProps(a, __getOwnPropDescs(b));
+
 console.log("[NetMirror] Initializing NetMirror provider");
+
 const TMDB_API_KEY = "439c478a771f35c05022f9feabcca01c";
 const NETMIRROR_BASE = "https://net22.cc";
 const NETMIRROR_PLAY = "https://net52.cc";
@@ -28,9 +30,11 @@ const BASE_HEADERS = {
   "Accept-Language": "en-US,en;q=0.5",
   "Connection": "keep-alive"
 };
+
 let globalCookie = "";
 let cookieTimestamp = 0;
 const COOKIE_EXPIRY = 54e6;
+
 function makeRequest(url, options = {}) {
   return fetch(url, __spreadProps(__spreadValues({}, options), {
     headers: __spreadValues(__spreadValues({}, BASE_HEADERS), options.headers),
@@ -42,9 +46,11 @@ function makeRequest(url, options = {}) {
     return response;
   });
 }
+
 function getUnixTime() {
   return Math.floor(Date.now() / 1e3);
 }
+
 function bypass() {
   const now = Date.now();
   if (globalCookie && cookieTimestamp && now - cookieTimestamp < COOKIE_EXPIRY) {
@@ -86,6 +92,7 @@ function bypass() {
   }
   return attemptBypass(0);
 }
+
 function getVideoToken(id, cookie, ott) {
   const cookies = {
     "t_hash_t": cookie,
@@ -131,6 +138,7 @@ function getVideoToken(id, cookie, ott) {
     return tokenMatch ? tokenMatch[1] : null;
   });
 }
+
 function searchContent(query, platform) {
   console.log(`[NetMirror] Searching for "${query}" on ${platform}...`);
   const ottMap = {
@@ -178,6 +186,7 @@ function searchContent(query, platform) {
     }
   });
 }
+
 function getEpisodesFromSeason(seriesId, seasonId, platform, page) {
   const ottMap = {
     "netflix": "nf",
@@ -229,6 +238,7 @@ function getEpisodesFromSeason(seriesId, seasonId, platform, page) {
     return fetchPage(currentPage);
   });
 }
+
 function loadContent(contentId, platform) {
   console.log(`[NetMirror] Loading content details for ID: ${contentId}`);
   const ottMap = {
@@ -309,6 +319,7 @@ function loadContent(contentId, platform) {
     };
   });
 }
+
 function getStreamingLinks(contentId, title, platform) {
   console.log(`[NetMirror] Getting streaming links for: ${title}`);
   const ottMap = {
@@ -356,8 +367,7 @@ function getStreamingLinks(contentId, title, platform) {
       if (item.sources) {
         item.sources.forEach((source) => {
           let fullUrl = source.file.replace("/tv/", "/");
-          if (!fullUrl.startsWith("/"))
-            fullUrl = "/" + fullUrl;
+          if (!fullUrl.startsWith("/")) fullUrl = "/" + fullUrl;
           fullUrl = NETMIRROR_PLAY + "/" + fullUrl;
           sources.push({
             url: fullUrl,
@@ -385,42 +395,16 @@ function getStreamingLinks(contentId, title, platform) {
     return { sources, subtitles };
   });
 }
-function findEpisodeId(episodes, season, episode) {
-  if (!episodes || episodes.length === 0) {
-    console.log("[NetMirror] No episodes found in content data");
-    return null;
-  }
-  const validEpisodes = episodes.filter((ep) => ep !== null);
-  console.log(`[NetMirror] Found ${validEpisodes.length} valid episodes`);
-  if (validEpisodes.length > 0) {
-    console.log(`[NetMirror] Sample episode structure:`, JSON.stringify(validEpisodes[0], null, 2));
-  }
-  const targetEpisode = validEpisodes.find((ep) => {
-    let epSeason, epNumber;
-    if (ep.s && ep.ep) {
-      epSeason = parseInt(ep.s.replace("S", ""));
-      epNumber = parseInt(ep.ep.replace("E", ""));
-    } else if (ep.season && ep.episode) {
-      epSeason = parseInt(ep.season);
-      epNumber = parseInt(ep.episode);
-    } else if (ep.season_number && ep.episode_number) {
-      epSeason = parseInt(ep.season_number);
-      epNumber = parseInt(ep.episode_number);
-    } else {
-      console.log(`[NetMirror] Unknown episode format:`, ep);
-      return false;
-    }
-    console.log(`[NetMirror] Checking episode S${epSeason}E${epNumber} against target S${season}E${episode}`);
-    return epSeason === season && epNumber === episode;
+
+function filterHighQuality(streams) {
+  return streams.filter(function(s) {
+    var q = (s.quality || s.title || "").toString().toLowerCase();
+    if (q.includes("4k") || q.includes("2160") || q.includes("1080")) return true;
+    if (q.includes("auto") || q.includes("unknown") || q === "") return true;
+    return false;
   });
-  if (targetEpisode) {
-    console.log(`[NetMirror] Found target episode:`, targetEpisode);
-    return targetEpisode.id;
-  } else {
-    console.log(`[NetMirror] Target episode S${season}E${episode} not found`);
-    return null;
-  }
 }
+
 function getStreams(tmdbId, mediaType = "movie", seasonNum = null, episodeNum = null) {
   console.log(`[NetMirror] Fetching streams for TMDB ID: ${tmdbId}, Type: ${mediaType}${seasonNum ? `, S${seasonNum}E${episodeNum}` : ""}`);
   const tmdbUrl = `https://api.themoviedb.org/3/${mediaType === "tv" ? "tv" : "movie"}/${tmdbId}?api_key=${TMDB_API_KEY}`;
@@ -442,8 +426,7 @@ function getStreams(tmdbId, mediaType = "movie", seasonNum = null, episodeNum = 
     function calculateSimilarity(str1, str2) {
       const s1 = str1.toLowerCase().trim();
       const s2 = str2.toLowerCase().trim();
-      if (s1 === s2)
-        return 1;
+      if (s1 === s2) return 1;
       const words1 = s1.split(/\s+/).filter((w) => w.length > 0);
       const words2 = s2.split(/\s+/).filter((w) => w.length > 0);
       if (words2.length <= words1.length) {
@@ -457,9 +440,7 @@ function getStreams(tmdbId, mediaType = "movie", seasonNum = null, episodeNum = 
           return 0.95 * (exactMatches / words1.length);
         }
       }
-      if (s1.startsWith(s2)) {
-        return 0.9;
-      }
+      if (s1.startsWith(s2)) return 0.9;
       return 0;
     }
     function filterRelevantResults(searchResults, query) {
@@ -566,9 +547,7 @@ function getStreams(tmdbId, mediaType = "movie", seasonNum = null, episodeNum = 
                 if (mediaType === "tv") {
                   const episodeName = episodeData && episodeData.t ? episodeData.t : "";
                   streamTitle += ` S${seasonNum}E${episodeNum}`;
-                  if (episodeName) {
-                    streamTitle += ` - ${episodeName}`;
-                  }
+                  if (episodeName) streamTitle += ` - ${episodeName}`;
                 }
                 const streamHeaders = {
                   "User-Agent": "Mozilla/5.0 (Android) ExoPlayer",
@@ -587,34 +566,30 @@ function getStreams(tmdbId, mediaType = "movie", seasonNum = null, episodeNum = 
                   headers: streamHeaders
                 };
               });
+
               streams.sort((a, b) => {
-                if (a.quality.toLowerCase() === "auto" && b.quality.toLowerCase() !== "auto") {
-                  return -1;
-                }
-                if (b.quality.toLowerCase() === "auto" && a.quality.toLowerCase() !== "auto") {
-                  return 1;
-                }
+                if (a.quality.toLowerCase() === "auto" && b.quality.toLowerCase() !== "auto") return -1;
+                if (b.quality.toLowerCase() === "auto" && a.quality.toLowerCase() !== "auto") return 1;
                 const parseQuality = (quality) => {
                   const match = quality.match(/(\d{3,4})p/i);
                   return match ? parseInt(match[1], 10) : 0;
                 };
-                const qualityA = parseQuality(a.quality);
-                const qualityB = parseQuality(b.quality);
-                return qualityB - qualityA;
+                return parseQuality(b.quality) - parseQuality(a.quality);
               });
-              console.log(`[NetMirror] Successfully processed ${streams.length} streams from ${platform}`);
-              return streams;
+
+              const filtered = filterHighQuality(streams);
+              const finalStreams = filtered.length > 0 ? filtered : streams;
+
+              console.log(`[NetMirror] Successfully processed ${finalStreams.length} streams from ${platform} (filtered from ${streams.length})`);
+              return finalStreams;
             });
           });
         });
       }
       return trySearch(false).then(function(result) {
-        if (result) {
-          return result;
-        } else {
-          console.log(`[NetMirror] No content found on ${platform}, trying next platform`);
-          return tryPlatform(platformIndex + 1);
-        }
+        if (result) return result;
+        console.log(`[NetMirror] No content found on ${platform}, trying next platform`);
+        return tryPlatform(platformIndex + 1);
       }).catch(function(error) {
         console.log(`[NetMirror] Error on ${platform}: ${error.message}, trying next platform`);
         return tryPlatform(platformIndex + 1);
@@ -626,6 +601,7 @@ function getStreams(tmdbId, mediaType = "movie", seasonNum = null, episodeNum = 
     return [];
   });
 }
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { getStreams };
 } else {
