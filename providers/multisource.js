@@ -1,7 +1,7 @@
-// ============================================================
-//  Retromio — v5 minimal test
-//  Sadece VixSrc, VixSrc kaynak kodundan birebir uyarlandı
-// ============================================================
+/**
+ * Retromio — v6
+ * Vidlink provider kaynak kodundan birebir uyarlandı
+ */
 "use strict";
 
 var __async = function(__this, __arguments, generator) {
@@ -19,92 +19,96 @@ var __async = function(__this, __arguments, generator) {
   });
 };
 
-var BASE_URL = "https://vixsrc.to";
-var USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+var ENC_DEC_API = "https://enc-dec.app/api";
+var VIDLINK_API  = "https://vidlink.pro/api/b";
+var VIDLINK_HEADERS = {
+  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
+  "Connection": "keep-alive",
+  "Referer": "https://vidlink.pro/",
+  "Origin": "https://vidlink.pro"
+};
 
-function makeRequest(url, options) {
-  options = options || {};
-  var headers = Object.assign({
-    "User-Agent": USER_AGENT,
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.5",
-    "Connection": "keep-alive"
-  }, options.headers || {});
-
-  return fetch(url, { method: "GET", headers: headers })
-    .then(function(response) {
-      if (!response.ok) throw new Error("HTTP " + response.status);
-      return response;
+// TMDB ID'yi şifrele
+function encryptTmdbId(tmdbId) {
+  return __async(this, null, function*() {
+    var response = yield fetch(ENC_DEC_API + "/enc-vidlink?text=" + tmdbId, {
+      headers: { "User-Agent": VIDLINK_HEADERS["User-Agent"] }
     });
+    var data = yield response.json();
+    if (data && data.result) return data.result;
+    throw new Error("Encryption failed");
+  });
 }
 
-function extractStreamFromPage(contentType, contentId, seasonNum, episodeNum) {
-  return __async(this, null, function*() {
-    var vixsrcUrl;
-    if (contentType === "movie") {
-      vixsrcUrl = BASE_URL + "/movie/" + contentId;
-    } else {
-      vixsrcUrl = BASE_URL + "/tv/" + contentId + "/" + seasonNum + "/" + episodeNum;
+// JSON'dan stream URL'lerini çıkar
+function extractStreams(data, title) {
+  var streams = [];
+
+  try {
+    if (data.stream && data.stream.qualities) {
+      Object.keys(data.stream.qualities).forEach(function(key) {
+        var q = data.stream.qualities[key];
+        if (q.url) {
+          streams.push({
+            name: "Retromio",
+            title: "Vidlink · " + key,
+            url: q.url,
+            quality: key,
+            headers: VIDLINK_HEADERS
+          });
+        }
+      });
     }
 
-    console.log("[Retromio] Fetching: " + vixsrcUrl);
-    var response = yield makeRequest(vixsrcUrl);
-    var html = yield response.text();
-    console.log("[Retromio] HTML length: " + html.length);
-
-    var masterPlaylistUrl = null;
-
-    if (html.includes("masterPlaylist")) {
-      var urlMatch     = html.match(/url:\s*['"]([^'"]+)['"]/);
-      var tokenMatch   = html.match(/['"]?token['"]?\s*:\s*['"]([^'"]+)['"]/);
-      var expiresMatch = html.match(/['"]?expires['"]?\s*:\s*['"]([^'"]+)['"]/);
-
-      if (urlMatch && tokenMatch && expiresMatch) {
-        var base    = urlMatch[1];
-        var token   = tokenMatch[1];
-        var expires = expiresMatch[1];
-        masterPlaylistUrl = base.includes("?b=1")
-          ? base + "&token=" + token + "&expires=" + expires + "&h=1&lang=en"
-          : base + "?token=" + token + "&expires=" + expires + "&h=1&lang=en";
-        console.log("[Retromio] masterPlaylist URL bulundu");
-      }
+    if (data.stream && data.stream.playlist && streams.length === 0) {
+      streams.push({
+        name: "Retromio",
+        title: "Vidlink · Auto",
+        url: data.stream.playlist,
+        quality: "Auto",
+        headers: VIDLINK_HEADERS
+      });
     }
 
-    if (!masterPlaylistUrl) {
-      var m3u8Match = html.match(/(https?:\/\/[^'"\s]+\.m3u8[^'"\s]*)/);
-      if (m3u8Match) masterPlaylistUrl = m3u8Match[1];
+    if (streams.length === 0 && data.url) {
+      streams.push({
+        name: "Retromio",
+        title: "Vidlink · Auto",
+        url: data.url,
+        quality: "Auto",
+        headers: VIDLINK_HEADERS
+      });
     }
+  } catch(e) {
+    console.error("[Retromio] extractStreams hata: " + e.message);
+  }
 
-    if (!masterPlaylistUrl) {
-      console.log("[Retromio] Stream bulunamadı");
-      return null;
-    }
-
-    return masterPlaylistUrl;
-  });
+  return streams;
 }
 
 function getStreams(tmdbId, mediaType, season, episode) {
   return __async(this, null, function*() {
-    console.log("[Retromio] getStreams: " + mediaType + " " + tmdbId);
-    var s = season || 1;
-    var e = episode || 1;
+    console.log("[Retromio] Fetching " + mediaType + " tmdb:" + tmdbId);
 
     try {
-      var url = yield extractStreamFromPage(mediaType, tmdbId, s, e);
-      if (!url) return [];
+      var encId = yield encryptTmdbId(tmdbId);
+      console.log("[Retromio] Encrypted ID alındı");
 
-      return [{
-        name: "Retromio",
-        title: "VixSrc · Auto",
-        url: url,
-        quality: "Auto",
-        type: "direct",
-        headers: {
-          "Referer": BASE_URL,
-          "User-Agent": USER_AGENT
-        }
-      }];
+      var url;
+      if (mediaType === "tv" && season && episode) {
+        url = VIDLINK_API + "/tv/" + encId + "/" + season + "/" + episode;
+      } else {
+        url = VIDLINK_API + "/movie/" + encId;
+      }
+
+      console.log("[Retromio] API isteği: " + url);
+      var response = yield fetch(url, { headers: VIDLINK_HEADERS });
+      var data = yield response.json();
+
+      var streams = extractStreams(data);
+      console.log("[Retromio] Stream sayısı: " + streams.length);
+      return streams;
+
     } catch(err) {
       console.error("[Retromio] Hata: " + err.message);
       return [];
