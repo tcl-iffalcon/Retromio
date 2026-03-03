@@ -107,7 +107,7 @@ const MAX_CONCURRENT = 2;   // fal.ai free tier limit is 2 concurrent
 const requestQueue = [];
 
 // ── Cache version: bump this to invalidate all stored posters ────────────────
-const POSTER_VERSION = "v11";
+const POSTER_VERSION = "v12";
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
