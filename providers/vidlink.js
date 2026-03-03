@@ -433,4 +433,17 @@ function getStreams(tmdbId, mediaType = "movie", seasonNum = null, episodeNum = 
     }
   });
 }
+function filterHighQuality(streams) {
+  return streams.filter(function(s) {
+    var q = (s.quality || s.title || "").toString().toLowerCase();
+    if (q.includes("4k") || q.includes("2160") || q.includes("1080")) return true;
+    if (q.includes("auto") || q.includes("unknown") || q === "") return true;
+    return false;
+  });
+}
+
+var _vidlinkOriginal = getStreams;
+function getStreams(tmdbId, mediaType, season, episode) {
+  return _vidlinkOriginal(tmdbId, mediaType, season, episode).then(filterHighQuality);
+}
 module.exports = { getStreams };
