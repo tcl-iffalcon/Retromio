@@ -1,13 +1,11 @@
 const fetch = require("node-fetch");
-
 const TMDB_API_KEY = "439c478a771f35c05022f9feabcca01c";
 const TMDB_BASE = "https://api.themoviedb.org/3";
 
-// Polyfill fetch for providers
 global.fetch = fetch;
 
-const vidlink = require("../providers/vidlink.js");
-const netmirror = require("../providers/netmirror.js");
+const vidlink = require("./providers/vidlink.js");
+const netmirror = require("./providers/netmirror.js");
 
 async function resolveTmdbId(id, type) {
   const isMovie = type === "movie";
@@ -27,7 +25,6 @@ async function fetchStreams(id, type, season, episode) {
   const isMovie = type === "movie";
   const mediaType = isMovie ? "movie" : "tv";
 
-  // Parse season/episode from video id (format: tt1234:1:2)
   let seasonNum = season ? parseInt(season) : null;
   let episodeNum = episode ? parseInt(episode) : null;
 
