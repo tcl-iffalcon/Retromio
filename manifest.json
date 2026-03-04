@@ -1,49 +1,50 @@
-{
-“id”: “com.retromio.addon”,
-“version”: “1.1.0”,
-“name”: “Retromio”,
-“description”: “Her içerik türü için ayrı promthlarla yapay zeka tarafından hazırlanmış posterleri Vidlink ve Netmirror kullanarak sunan Nuvio ve Stremio eklentisi.”,
-“logo”: “https://img.icons8.com/fluency/96/retro-tv.png”,
-“background”: “https://img.icons8.com/fluency/512/retro-tv.png”,
-“resources”: [“catalog”, “meta”, “stream”],
-“types”: [“movie”, “series”],
-“idPrefixes”: [“tt”, “tmdb:”],
-“catalogs”: [
-{
-“type”: “movie”,
-“id”: “retromio_trending_movies”,
-“name”: “🎬 Trend Filmler”,
-“extra”: [
-{ “name”: “skip”, “isRequired”: false, “options”: [“0”, “20”, “40”] }
-]
-},
-{
-“type”: “movie”,
-“id”: “retromio_popular_movies”,
-“name”: “⭐ Popüler Filmler”,
-“extra”: [
-{ “name”: “skip”, “isRequired”: false, “options”: [“0”, “20”, “40”] }
-]
-},
-{
-“type”: “series”,
-“id”: “retromio_trending_series”,
-“name”: “📺 Trend Diziler”,
-“extra”: [
-{ “name”: “skip”, “isRequired”: false, “options”: [“0”, “20”, “40”] }
-]
-},
-{
-“type”: “series”,
-“id”: “retromio_popular_series”,
-“name”: “⭐ Popüler Diziler”,
-“extra”: [
-{ “name”: “skip”, “isRequired”: false, “options”: [“0”, “20”, “40”] }
-]
+  {
+  "id": "com.retromio.addon",
+  "version": "1.1.0",
+  "name": "Retromio",
+  "description": "Her içerik türü için ayrı promthlarla yapay zeka tarafından hazırlanmış posterleri Vidlink ve Netmirror kullanarak sunan Nuvio ve Stremio eklentisi.",
+  "logo": "https://img.icons8.com/fluency/96/retro-tv.png",
+  "background": "https://img.icons8.com/fluency/512/retro-tv.png",
+  "resources": ["catalog", "meta", "stream"],
+  "types": ["movie", "series"],
+  "idPrefixes": ["tt", "tmdb:"],
+  "catalogs": [
+    {
+      "type": "movie",
+      "id": "retromio_trending_movies",
+      "name": "🎬 Trending Movies",
+      "extra": [
+        { "name": "skip", "isRequired": false }
+      ]
+    },
+    {
+      "type": "movie",
+      "id": "retromio_popular_movies",
+      "name": "⭐ Popular Movies",
+      "extra": [
+        { "name": "skip", "isRequired": false }
+      ]
+    },
+    {
+      "type": "series",
+      "id": "retromio_trending_series",
+      "name": "📺 Trending Series",
+      "extra": [
+        { "name": "skip", "isRequired": false }
+      ]
+    },
+    {
+      "type": "series",
+      "id": "retromio_popular_series",
+      "name": "⭐ Popular Series",
+      "extra": [
+        { "name": "skip", "isRequired": false }
+      ]
+    }
+  ],
+  "behaviorHints": {
+    "configurable": true,
+    "configurationRequired": false
+  }
 }
-],
-“behaviorHints”: {
-“configurable”: true,
-“configurationRequired”: false
-}
-}
+
