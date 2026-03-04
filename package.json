@@ -1,7 +1,7 @@
 {
   "name": "retromio",
   "version": "1.0.0",
-  "description": "Nuvio ve Stremio için posterleri yapay zeka aracılığıyla düzenler, Vidlink ve NetMirror kaynaklarından içerik sunar",
+  "description": "Retromio - Stremio Addon with Vidlink & NetMirror",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -10,8 +10,7 @@
   "dependencies": {
     "express": "^4.18.2",
     "node-fetch": "^2.7.0",
-    "cors": "^2.8.5",
-    "@aws-sdk/client-s3": "^3.600.0"
+    "cors": "^2.8.5"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"
