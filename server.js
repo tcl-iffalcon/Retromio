@@ -77,14 +77,14 @@ app.get("/configure", (req, res) => {
     .bg-photo {
       position: absolute; inset: 0;
       background: url('/kibar-feyzo.jpg') center/cover no-repeat;
-      opacity: 1;
+      opacity: 0.96;
       filter: grayscale(5%);
       transform: scale(1.06);
       transition: opacity 1s;
     }
     .bg-vignette {
       position: absolute; inset: 0;
-      background:transparent;
+      background:
         radial-gradient(ellipse 60% 100% at 80% 50%, transparent 0%, rgba(8,8,16,0.3) 60%, rgba(8,8,16,0.75) 100%),
         linear-gradient(to right, rgba(8,8,16,0.15) 0%, transparent 35%, rgba(8,8,16,0.55) 100%);
     }
@@ -122,8 +122,9 @@ app.get("/configure", (req, res) => {
       letter-spacing: 0.32em;
       text-transform: uppercase;
       color: var(--gold);
-      opacity: 0.7;
+      opacity: 0.9;
       margin-bottom: 1rem;
+      text-shadow: 0 1px 8px rgba(0,0,0,0.8), 0 0 20px rgba(0,0,0,0.6);
     }
     .logo {
       font-family: 'Playfair Display', serif;
@@ -131,12 +132,14 @@ app.get("/configure", (req, res) => {
       font-weight: 700;
       line-height: 0.85;
       letter-spacing: -0.03em;
-      color: var(--text);
+      color: #fff;
       margin-bottom: 0.15em;
+      text-shadow: 0 2px 16px rgba(0,0,0,0.9), 0 4px 32px rgba(0,0,0,0.7);
     }
     .logo em {
       font-style: italic;
       color: var(--gold);
+      text-shadow: 0 2px 16px rgba(0,0,0,0.9);
     }
     .rule {
       display: flex;
@@ -149,24 +152,25 @@ app.get("/configure", (req, res) => {
       max-width: 32px;
       height: 1px;
       background: linear-gradient(to right, var(--gold), transparent);
-      opacity: 0.4;
+      opacity: 0.6;
     }
     .rule-dot {
       width: 3px; height: 3px;
       border-radius: 50%;
       background: var(--gold);
-      opacity: 0.5;
+      opacity: 0.7;
     }
     .tagline {
-      font-size: 0.82rem;
-      font-weight: 300;
+      font-size: 0.85rem;
+      font-weight: 400;
       line-height: 1.8;
-      color: var(--muted);
+      color: rgba(255,255,255,0.9);
       margin-bottom: 2.2rem;
+      text-shadow: 0 1px 8px rgba(0,0,0,0.9), 0 2px 16px rgba(0,0,0,0.7);
     }
     .tagline strong {
-      color: rgba(237,232,223,0.72);
-      font-weight: 400;
+      color: #fff;
+      font-weight: 600;
     }
 
     /* ── Card ── */
@@ -371,7 +375,8 @@ app.get("/configure", (req, res) => {
       </div>
 
       <p class="tagline">
-        <strong>Her içerik türü için ayrı promthlarla yapay zeka tarafından hazırlanmış posterleri Vidlink ve Netmirror kullanarak sunan Nuvio ve Stremio eklentisi.</strong> —<br>
+        <strong>Yapay zeka</strong> ile üretilmiş retro sinema posterleri —<br>
+        <strong>Vidlink</strong> ve <strong>NetMirror</strong>'dan 1080p akış.
       </p>
 
       <div class="card">
