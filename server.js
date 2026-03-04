@@ -99,7 +99,7 @@ const B2 = new S3Client({
   }
 });
 const B2_BUCKET = "retromio-posters";
-const B2_PUBLIC = `https://${process.env.B2_KEY_ID}.s3.us-east-005.backblazeb2.com/${B2_BUCKET}`;
+const B2_PUBLIC = `https://${B2_BUCKET}.s3.us-east-005.backblazeb2.com`;
 
 const AI_PENDING = new Map();
 let activeRequests = 0;
