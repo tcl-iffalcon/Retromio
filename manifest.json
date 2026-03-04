@@ -1,8 +1,8 @@
 {
   "id": "com.retromio.addon",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "name": "Retromio",
-  "description": "Retro-styled movie & series catalog with Vidlink and NetMirror streams",
+  "description": "AI-generated retro cinema posters for every movie & series — pulp fiction style, vintage Hollywood, dramatic lighting. Streams via Vidlink & NetMirror.",
   "logo": "https://img.icons8.com/fluency/96/retro-tv.png",
   "background": "https://img.icons8.com/fluency/512/retro-tv.png",
   "resources": ["catalog", "meta", "stream"],
@@ -12,7 +12,7 @@
     {
       "type": "movie",
       "id": "retromio_trending_movies",
-      "name": "Retromio Trending",
+      "name": "🎬 Trending Movies",
       "extra": [
         { "name": "skip", "isRequired": false }
       ]
@@ -20,7 +20,7 @@
     {
       "type": "movie",
       "id": "retromio_popular_movies",
-      "name": "Retromio Popular",
+      "name": "⭐ Popular Movies",
       "extra": [
         { "name": "skip", "isRequired": false }
       ]
@@ -28,7 +28,7 @@
     {
       "type": "series",
       "id": "retromio_trending_series",
-      "name": "Retromio Trending",
+      "name": "📺 Trending Series",
       "extra": [
         { "name": "skip", "isRequired": false }
       ]
@@ -36,7 +36,7 @@
     {
       "type": "series",
       "id": "retromio_popular_series",
-      "name": "Retromio Popular",
+      "name": "⭐ Popular Series",
       "extra": [
         { "name": "skip", "isRequired": false }
       ]

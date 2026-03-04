@@ -7,4 +7,25 @@ services:
     envVars:
       - key: PORT
         value: 3000
+      - key: NODE_ENV
+        value: production
+      # Hugging Face — get from https://huggingface.co/settings/tokens
+      - key: HF_TOKEN
+        sync: false
+      # Backblaze B2 S3-compatible credentials
+      - key: B2_KEY_ID
+        sync: false
+      - key: B2_APP_KEY
+        sync: false
+      # Optional overrides
+      - key: B2_BUCKET
+        value: retromio-posters
+      - key: B2_REGION
+        value: us-east-005
+      - key: POSTER_VERSION
+        value: v14
+      # Optional: use your own TMDB key
+      - key: TMDB_API_KEY
+        sync: false
     autoDeploy: true
+    healthCheckPath: /manifest.json
