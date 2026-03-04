@@ -3,6 +3,14 @@ const TMDB_API_KEY = "439c478a771f35c05022f9feabcca01c";
 const TMDB_BASE = "https://api.themoviedb.org/3";
 const TMDB_IMG = "https://image.tmdb.org/t/p/w500";
 
+const POSTER_VERSION = "v12";
+const B2_BUCKET_URL = "https://retromio-posters.s3.us-east-005.backblazeb2.com";
+
+function posterKey(title, year) {
+  const safe = (title || "unknown").replace(/[^a-z0-9]/gi, "_").toLowerCase();
+  return `${POSTER_VERSION}_${safe}_${year || "0"}.jpg`;
+}
+
 function getAiPosterUrl(baseUrl, item, type) {
   const isMovie = type === "movie";
   const title = isMovie ? item.title : item.name;
@@ -10,6 +18,9 @@ function getAiPosterUrl(baseUrl, item, type) {
   const year = releaseDate ? releaseDate.substring(0, 4) : "";
   const genres = (item.genre_ids || []).slice(0, 3).join(",");
   const overview = (item.overview || "").substring(0, 200);
+  const key = posterKey(title, year);
+  // Return direct B2 URL — Stremio will show it instantly if cached, else trigger generation via background fetch
+  const b2Url = `${B2_BUCKET_URL}/${key}`;
   const params = new URLSearchParams({
     title: title || "",
     year: year || "",
@@ -18,7 +29,9 @@ function getAiPosterUrl(baseUrl, item, type) {
     overview: overview,
     fallback: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : ""
   });
-  return `${baseUrl}/ai-poster?${params.toString()}`;
+  // Trigger generation in background (fire and forget)
+  fetch(`${baseUrl}/ai-poster?${params.toString()}`).catch(() => {});
+  return b2Url;
 }
 
 function tmdbToStremio(item, type, baseUrl) {
