@@ -156,8 +156,12 @@ function buildPrompt(title, year, type, genreIds, overview) {
 
 // ─── AI Generation via Hugging Face ──────────────────────────────────────────
 
+// Track if HF quota is exhausted to skip further attempts this session
+let hfQuotaExhausted = false;
+
 async function generatePoster(title, year, type, genreIds, overview) {
   if (!HF_TOKEN) throw new Error("HF_TOKEN env variable not set");
+  if (hfQuotaExhausted) throw new Error("HuggingFace quota exhausted — using fallback posters");
 
   const { prompt, styleLabel } = buildPrompt(title, year, type, genreIds, overview);
   const seed = Math.abs([...(title || "x")].reduce((a, c) => a + c.charCodeAt(0), 0));
@@ -188,6 +192,11 @@ async function generatePoster(title, year, type, genreIds, overview) {
 
     if (!hfRes.ok) {
       const txt = await hfRes.text();
+      // Mark quota exhausted so we stop hammering the API
+      if (hfRes.status === 402 || hfRes.status === 429) {
+        hfQuotaExhausted = true;
+        console.warn(`[AI] ⚠️  HuggingFace quota exhausted (${hfRes.status}). Falling back to TMDB posters until restart.`);
+      }
       throw new Error(`HuggingFace ${hfRes.status}: ${txt.substring(0, 200)}`);
     }
 
@@ -252,10 +261,11 @@ function triggerPoster(title, year, type, genreIds, overview) {
 
 function getQueueStatus() {
   return {
-    active:  activeRequests,
-    queued:  requestQueue.length,
-    pending: AI_PENDING.size,
-    max:     MAX_CONCURRENT
+    active:         activeRequests,
+    queued:         requestQueue.length,
+    pending:        AI_PENDING.size,
+    max:            MAX_CONCURRENT,
+    quotaExhausted: hfQuotaExhausted
   };
 }
 
