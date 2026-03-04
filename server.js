@@ -23,9 +23,7 @@ function getBaseUrl(req) {
   return `${proto}://${req.get("host")}`;
 }
 
-function getUserConfig(req) {
-  return {};
-}
+// getUserConfig removed — unused
 
 // ─── Configure Page ──────────────────────────────────────────────────────────
 
@@ -213,7 +211,7 @@ async function generateWithFal(title, year, type, genreIds, overview) {
 }
 
 // Pre-generate poster in background and store in B2
-async function prewarmPoster(title, year, type) {
+async function prewarmPoster(title, year, type, genres = "", overview = "") {
   const key = posterKey(title, year);
   if (await existsInB2(key)) return;
   if (AI_PENDING.has(key)) return;
@@ -316,7 +314,7 @@ async function handleCatalog(req, res) {
   const skip = parseInt(req.query.skip || req.params.extra?.replace("skip=", "") || "0");
   console.log(`[Catalog] type=${type} id=${id} skip=${skip}`);
   try {
-    const metas = await fetchCatalog(id, type, skip, baseUrl);
+    const metas = await fetchCatalog(id, type, skip, baseUrl, true);
     res.json({ metas });
   } catch (err) {
     console.error(`[Catalog] Error: ${err.message}`);

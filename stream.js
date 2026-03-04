@@ -4,8 +4,8 @@ const TMDB_BASE = "https://api.themoviedb.org/3";
 
 global.fetch = fetch;
 
-const vidlink = require("./providers/vidlink.js");
-const netmirror = require("./providers/netmirror.js");
+const vidlink = require("./vidlink.js");
+const netmirror = require("./netmirror.js");
 
 async function resolveTmdbId(id, type) {
   const isMovie = type === "movie";

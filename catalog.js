@@ -15,6 +15,7 @@ function getPosterUrl(baseUrl, tmdbPath, retro) {
 
 function tmdbToStremio(item, type, baseUrl, retro) {
   const isMovie = type === "movie";
+  const stremioType = isMovie ? "movie" : "series";
   const title = isMovie ? item.title : item.name;
   const releaseDate = isMovie ? item.release_date : item.first_air_date;
   const year = releaseDate ? releaseDate.substring(0, 4) : null;
@@ -23,7 +24,7 @@ function tmdbToStremio(item, type, baseUrl, retro) {
 
   return {
     id,
-    type: isMovie ? "movie" : "series",
+    type: stremioType,
     name: title,
     poster: getPosterUrl(baseUrl, item.poster_path, retro),
     background: item.backdrop_path ? `https://image.tmdb.org/t/p/w1280${item.backdrop_path}` : null,
@@ -51,9 +52,10 @@ async function fetchCatalog(catalogId, type, skip = 0, baseUrl, retro) {
 
   if (!data.results) return [];
 
+  const tmdbType = type === "series" ? "tv" : "movie";
   const metas = data.results
     .filter(item => item.poster_path)
-    .map(item => tmdbToStremio(item, type === "series" ? "tv" : "movie", baseUrl, retro));
+    .map(item => tmdbToStremio(item, tmdbType, baseUrl, retro));
 
   return metas;
 }
