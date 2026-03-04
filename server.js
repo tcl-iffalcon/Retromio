@@ -84,7 +84,7 @@ app.get("/configure", (req, res) => {
     }
     .bg-vignette {
       position: absolute; inset: 0;
-      background:
+      background:transparent;
         radial-gradient(ellipse 60% 100% at 80% 50%, transparent 0%, rgba(8,8,16,0.3) 60%, rgba(8,8,16,0.75) 100%),
         linear-gradient(to right, rgba(8,8,16,0.15) 0%, transparent 35%, rgba(8,8,16,0.55) 100%);
     }
