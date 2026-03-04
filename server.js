@@ -77,7 +77,7 @@ app.get("/configure", (req, res) => {
     .bg-photo {
       position: absolute; inset: 0;
       background: url('/kibar-feyzo.jpg') center/cover no-repeat;
-      opacity: 0.96;
+      opacity: 0.92;
       filter: grayscale(5%);
       transform: scale(1.06);
       transition: opacity 1s;
@@ -483,24 +483,25 @@ app.get("/ai-poster", async (req, res) => {
     return fallback ? res.redirect(fallback) : res.status(400).send("Missing title");
   }
 
-  const key = posterKey(title, year);
+  const key        = posterKey(title, year);
+  const cldUrl     = posterUrl(title, year);
 
-  // 1. B2 cache hit
+  // 1. Cloudinary cache hit
   try {
-    const exists = await existsInB2(key);
+    const exists = await existsInB2(title, year);
     if (exists) {
-      console.log(`[Poster] B2 hit: ${key}`);
-      return res.redirect(`${B2_PUBLIC}/${key}`);
+      console.log(`[Poster] Cloudinary hit: ${key}`);
+      return res.redirect(cldUrl);
     }
   } catch (err) {
-    console.error(`[Poster] B2 check error: ${err.message}`);
+    console.error(`[Poster] Cache check error: ${err.message}`);
   }
 
   // 2. Already generating — attach to existing promise
   if (AI_PENDING.has(key)) {
     try {
       await AI_PENDING.get(key);
-      return res.redirect(`${B2_PUBLIC}/${key}`);
+      return res.redirect(cldUrl);
     } catch {
       return fallback ? res.redirect(fallback) : res.status(500).send("Generation failed");
     }
@@ -512,7 +513,7 @@ app.get("/ai-poster", async (req, res) => {
   try {
     const pending = AI_PENDING.get(key);
     if (pending) await pending;
-    return res.redirect(`${B2_PUBLIC}/${key}`);
+    return res.redirect(cldUrl);
   } catch {
     return fallback ? res.redirect(fallback) : res.status(500).send("Generation failed");
   }
