@@ -250,6 +250,7 @@ app.get("/poster-status", (req, res) => {
 </head>
 <body>
   <h2>🎨 AI Poster Queue</h2>
+  ${status.quotaExhausted ? '<div style="background:#3a1a1a;border:1px solid #c94c4c;border-radius:6px;padding:.75rem 1rem;margin-bottom:1rem;color:#e07070;">⚠️ HuggingFace quota exhausted. Serving TMDB fallback posters. Upgrade to HF Pro or purchase credits.</div>' : ''}
   <div class="stat"><span class="key">Active:  </span> ${status.active} / ${status.max}</div>
   <div class="stat"><span class="key">Queued:  </span> ${status.queued}</div>
   <div class="stat"><span class="key">Pending: </span> ${status.pending}</div>
