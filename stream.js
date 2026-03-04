@@ -1,4 +1,5 @@
 const fetch = require("node-fetch");
+
 const TMDB_API_KEY = "439c478a771f35c05022f9feabcca01c";
 const TMDB_BASE = "https://api.themoviedb.org/3";
 
@@ -43,23 +44,23 @@ async function fetchStreams(id, type, season, episode) {
 
   console.log(`[Stream] Fetching streams for TMDB ID: ${tmdbId}, type: ${mediaType}${seasonNum ? ` S${seasonNum}E${episodeNum}` : ""}`);
 
-  const [vidlinkStreams, netmirrorStreams] = await Promise.allSettled([
+  const [vidlinkResult, netmirrorResult] = await Promise.allSettled([
     vidlink.getStreams(tmdbId, mediaType, seasonNum, episodeNum),
     netmirror.getStreams(tmdbId, mediaType, seasonNum, episodeNum)
   ]);
 
   const streams = [];
 
-  if (vidlinkStreams.status === "fulfilled" && vidlinkStreams.value) {
-    streams.push(...vidlinkStreams.value);
+  if (vidlinkResult.status === "fulfilled" && vidlinkResult.value) {
+    streams.push(...vidlinkResult.value);
   } else {
-    console.log(`[Stream] Vidlink failed: ${vidlinkStreams.reason?.message}`);
+    console.log(`[Stream] Vidlink failed: ${vidlinkResult.reason?.message}`);
   }
 
-  if (netmirrorStreams.status === "fulfilled" && netmirrorStreams.value) {
-    streams.push(...netmirrorStreams.value);
+  if (netmirrorResult.status === "fulfilled" && netmirrorResult.value) {
+    streams.push(...netmirrorResult.value);
   } else {
-    console.log(`[Stream] NetMirror failed: ${netmirrorStreams.reason?.message}`);
+    console.log(`[Stream] NetMirror failed: ${netmirrorResult.reason?.message}`);
   }
 
   console.log(`[Stream] Total streams found: ${streams.length}`);
