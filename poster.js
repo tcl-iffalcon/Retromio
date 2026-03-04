@@ -19,7 +19,7 @@ const POSTER_VERSION = process.env.POSTER_VERSION || "v14";
 // ─── Concurrency control ──────────────────────────────────────────────────────
 const AI_PENDING     = new Map();
 let   activeRequests = 0;
-const MAX_CONCURRENT = 3; // Replicate handles concurrency better
+const MAX_CONCURRENT = 1; // Replicate rate limit: 6/min under $5 credit
 const requestQueue   = [];
 
 // ─── Genre → Prompt style map ─────────────────────────────────────────────────
@@ -155,8 +155,12 @@ function buildPrompt(title, year, type, genreIds, overview) {
 
 // ─── AI Generation via Replicate ─────────────────────────────────────────────
 
+// Track if Replicate quota is exhausted to skip further attempts this session
+let replicateQuotaExhausted = false;
+
 async function generatePoster(title, year, type, genreIds, overview) {
   if (!REPLICATE_TOKEN) throw new Error("REPLICATE_TOKEN env variable not set");
+  if (replicateQuotaExhausted) throw new Error("Replicate quota exhausted — using TMDB fallback posters");
 
   const { prompt, styleLabel } = buildPrompt(title, year, type, genreIds, overview);
   const seed = Math.abs([...(title || "x")].reduce((a, c) => a + c.charCodeAt(0), 0));
@@ -164,6 +168,9 @@ async function generatePoster(title, year, type, genreIds, overview) {
   activeRequests++;
   try {
     console.log(`[AI] Generating poster: "${title}" | genre: ${styleLabel}`);
+
+    // Small delay to respect Replicate rate limits (6 req/min = 1 per 10s)
+    await new Promise(r => setTimeout(r, 2000));
 
     // Step 1: Create prediction
     const createRes = await fetch("https://api.replicate.com/v1/models/black-forest-labs/flux-schnell/predictions", {
@@ -189,6 +196,17 @@ async function generatePoster(title, year, type, genreIds, overview) {
 
     if (!createRes.ok) {
       const txt = await createRes.text();
+      if (createRes.status === 402) {
+        replicateQuotaExhausted = true;
+        console.warn(`[AI] ⚠️  Replicate insufficient credit (402). Falling back to TMDB posters until restart.`);
+        throw new Error(`Replicate 402: insufficient credit`);
+      }
+      if (createRes.status === 429) {
+        // Rate limited — wait 15s and let the queue retry naturally
+        console.warn(`[AI] ⚠️  Replicate rate limit (429). Waiting 15s before retry...`);
+        await new Promise(r => setTimeout(r, 15000));
+        throw new Error(`Replicate 429: rate limited`);
+      }
       throw new Error(`Replicate create failed ${createRes.status}: ${txt.substring(0, 200)}`);
     }
 
@@ -281,11 +299,12 @@ function triggerPoster(title, year, type, genreIds, overview) {
 
 function getQueueStatus() {
   return {
-    active:   activeRequests,
-    queued:   requestQueue.length,
-    pending:  AI_PENDING.size,
-    max:      MAX_CONCURRENT,
-    provider: "Replicate (flux-schnell)"
+    active:         activeRequests,
+    queued:         requestQueue.length,
+    pending:        AI_PENDING.size,
+    max:            MAX_CONCURRENT,
+    provider:       "Replicate (flux-schnell)",
+    quotaExhausted: replicateQuotaExhausted
   };
 }
 
