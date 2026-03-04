@@ -41,23 +41,15 @@ async function fetchMeta(id, type, baseUrl) {
       : [];
     const tmdbPoster  = item.poster_path ? `${TMDB_IMG}${item.poster_path}` : null;
 
-    // ── Build /ai-poster URL ───────────────────────────────────────────────────
-    // Stremio will call this URL; our handler checks B2 cache, generates if needed,
-    // then redirects to the B2-hosted image.
-    const params = new URLSearchParams({
-      title:    title || "",
-      year:     year  || "",
-      type:     isMovie ? "movie" : "series",
-      genres:   genreIds,
-      overview: (item.overview || "").substring(0, 200),
-      fallback: tmdbPoster || ""
-    });
-    const posterEndpointUrl = baseUrl
-      ? `${baseUrl}/ai-poster?${params.toString()}`
-      : tmdbPoster;
-
-    // Also kick off background generation so it's likely ready on redirect
+    // Trigger background generation
     triggerPoster(title, year, isMovie ? "movie" : "series", genreIds, item.overview || "");
+
+    // Use direct Cloudinary URL if cached, otherwise TMDB fallback
+    let posterEndpointUrl = tmdbPoster;
+    try {
+      const exists = await existsInB2(title, year);
+      if (exists) posterEndpointUrl = posterUrl(title, year);
+    } catch {}
 
     // ── Build meta object ──────────────────────────────────────────────────────
     const meta = {
