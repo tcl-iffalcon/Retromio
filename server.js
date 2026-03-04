@@ -98,10 +98,17 @@ app.get("/ai-poster", async (req, res) => {
     return res.status(400).send("Missing title");
   }
   const key = posterKey(title, year);
+
+  // Already in B2 — instant
   try {
     const exists = await existsInB2(key);
-    if (exists) return res.redirect(`${B2_PUBLIC}/${key}`);
+    if (exists) {
+      console.log(`[AI Poster] B2 hit: ${key}`);
+      return res.redirect(`${B2_PUBLIC}/${key}`);
+    }
   } catch {}
+
+  // Already generating — wait for it
   if (AI_PENDING.has(key)) {
     try {
       await AI_PENDING.get(key);
@@ -111,9 +118,16 @@ app.get("/ai-poster", async (req, res) => {
       return res.status(500).send("Failed");
     }
   }
+
+  // Generate now and wait
   triggerPoster(title, year, type, genres, overview);
-  if (fallback) return res.redirect(fallback);
-  res.status(202).send("Generating");
+  try {
+    await AI_PENDING.get(key);
+    return res.redirect(`${B2_PUBLIC}/${key}`);
+  } catch {
+    if (fallback) return res.redirect(fallback);
+    return res.status(500).send("Failed");
+  }
 });
 
 
@@ -139,9 +153,10 @@ app.get("/:config/catalog/:type/:id/:extra?.json", handleCatalog);
 
 async function handleMeta(req, res) {
   const { type, id } = req.params;
+  const baseUrl = getBaseUrl(req);
   console.log(`[Meta] type=${type} id=${id}`);
   try {
-    const meta = await fetchMeta(id, type);
+    const meta = await fetchMeta(id, type, baseUrl);
     if (!meta) return res.json({ meta: null });
     res.json({ meta });
   } catch (err) {
