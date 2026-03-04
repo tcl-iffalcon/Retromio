@@ -86,27 +86,51 @@ app.get("/manifest.json", (req, res) => {
   res.json(baseManifest);
 });
 
-// ─── Backblaze B2 + Pollinations AI Poster ───────────────────────────────────
+// ─── Backblaze B2 + AI Poster ────────────────────────────────────────────────
 
-const { S3Client, PutObjectCommand, HeadObjectCommand } = require("@aws-sdk/client-s3");
-
-const B2 = new S3Client({
-  endpoint: "https://s3.us-east-005.backblazeb2.com",
-  region: "us-east-005",
-  credentials: {
-    accessKeyId: process.env.B2_KEY_ID,
-    secretAccessKey: process.env.B2_APP_KEY
-  }
-});
+const B2_KEY_ID = process.env.B2_KEY_ID || "";
+const B2_APP_KEY = process.env.B2_APP_KEY || "";
 const B2_BUCKET = "retromio-posters";
+const B2_ENDPOINT = "https://s3.us-east-005.backblazeb2.com";
 const B2_PUBLIC = `https://${B2_BUCKET}.s3.us-east-005.backblazeb2.com`;
 
-const AI_PENDING = new Map();
+function b2AuthHeader() {
+  const token = Buffer.from(`${B2_KEY_ID}:${B2_APP_KEY}`).toString("base64");
+  return `Basic ${token}`;
+}
+
+async function existsInB2(key) {
+  try {
+    const res = await fetch(`${B2_ENDPOINT}/${B2_BUCKET}/${key}`, {
+      method: "HEAD",
+      headers: { "Authorization": b2AuthHeader() }
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function uploadToB2(key, buffer) {
+  const res = await fetch(`${B2_ENDPOINT}/${B2_BUCKET}/${key}`, {
+    method: "PUT",
+    headers: {
+      "Authorization": b2AuthHeader(),
+      "Content-Type": "image/jpeg",
+      "x-amz-acl": "public-read"
+    },
+    body: buffer
+  });
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`B2 upload failed ${res.status}: ${txt}`);
+  }
+}
 let activeRequests = 0;
 const MAX_CONCURRENT = 2;   // fal.ai free tier limit is 2 concurrent
 const requestQueue = [];
 
-// ── Cache version: bump this to invalidate all stored posters ────────────────
+const AI_PENDING = new Map();
 const POSTER_VERSION = "v12";
 
 function sleep(ms) {
@@ -125,24 +149,8 @@ function posterKey(title, year) {
   return `${POSTER_VERSION}_${safe}_${year || "0"}.jpg`;
 }
 
-async function existsInB2(key) {
-  try {
-    await B2.send(new HeadObjectCommand({ Bucket: B2_BUCKET, Key: key }));
-    return true;
-  } catch {
-    return false;
-  }
-}
 
-async function uploadToB2(key, buffer) {
-  await B2.send(new PutObjectCommand({
-    Bucket: B2_BUCKET,
-    Key: key,
-    Body: buffer,
-    ContentType: "image/jpeg",
-    ACL: "public-read"
-  }));
-}
+
 
 // TMDB genre ID → genre name map
 const GENRE_MAP = {
@@ -252,7 +260,7 @@ async function generateWithFal(title, year, type, genreIds, overview) {
 }
 
 // Pre-generate poster in background and store in B2
-async function prewarmPoster(title, year, type) {
+async function prewarmPoster(title, year, type, genres = "", overview = "") {
   const key = posterKey(title, year);
   if (await existsInB2(key)) return;
   if (AI_PENDING.has(key)) return;
@@ -369,9 +377,10 @@ app.get("/:config/catalog/:type/:id/:extra?.json", handleCatalog);
 
 async function handleMeta(req, res) {
   const { type, id } = req.params;
+  const baseUrl = getBaseUrl(req);
   console.log(`[Meta] type=${type} id=${id}`);
   try {
-    const meta = await fetchMeta(id, type);
+    const meta = await fetchMeta(id, type, baseUrl);
     if (!meta) return res.json({ meta: null });
     res.json({ meta });
   } catch (err) {
