@@ -1,38 +1,48 @@
 const fetch = require("node-fetch");
-const { triggerPoster, posterKey, existsInB2, B2_PUBLIC } = require("./poster");
+const { triggerPoster, posterUrl, existsInB2 } = require("./poster");
 
 const TMDB_API_KEY = process.env.TMDB_API_KEY || "439c478a771f35c05022f9feabcca01c";
 const TMDB_BASE    = "https://api.themoviedb.org/3";
 const TMDB_IMG     = "https://image.tmdb.org/t/p/w500";
 
-async function tmdbToStremio(item, type, baseUrl) {
+// ─── Build poster URL ─────────────────────────────────────────────────────────
+// Returns direct Cloudinary URL if cached, otherwise TMDB fallback.
+
+async function getPosterUrl(item, type) {
+  const isMovie     = type === "movie";
+  const title       = isMovie ? item.title : item.name;
+  const releaseDate = isMovie ? item.release_date : item.first_air_date;
+  const year        = releaseDate ? releaseDate.substring(0, 4) : "";
+  const tmdbFallback = item.poster_path ? `${TMDB_IMG}${item.poster_path}` : null;
+
+  try {
+    const exists = await existsInB2(title, year);
+    if (exists) return posterUrl(title, year);
+  } catch {}
+
+  return tmdbFallback;
+}
+
+// ─── Convert TMDB item → Stremio meta ────────────────────────────────────────
+
+async function tmdbToStremio(item, type) {
   const isMovie     = type === "movie";
   const stremioType = isMovie ? "movie" : "series";
   const title       = isMovie ? item.title : item.name;
   const releaseDate = isMovie ? item.release_date : item.first_air_date;
   const year        = releaseDate ? releaseDate.substring(0, 4) : null;
   const id          = item.imdb_id || `tmdb:${item.id}`;
-  const tmdbPoster  = item.poster_path ? `${TMDB_IMG}${item.poster_path}` : null;
 
-  let poster = tmdbPoster;
-  if (title) {
-    const key = posterKey(title, year);
-    try {
-      const exists = await existsInB2(key);
-      if (exists) {
-        poster = `${B2_PUBLIC}/${key}`;
-        console.log(`[Catalog] AI poster ready for "${title}" -> B2`);
-      }
-    } catch {}
+  // Fire-and-forget background generation
+  triggerPoster(
+    title,
+    year,
+    isMovie ? "movie" : "series",
+    (item.genre_ids || []).join(","),
+    item.overview || ""
+  );
 
-    triggerPoster(
-      title,
-      year,
-      stremioType,
-      (item.genre_ids || []).join(","),
-      item.overview || ""
-    );
-  }
+  const poster = await getPosterUrl(item, isMovie ? "movie" : "tv");
 
   return {
     id,
@@ -49,6 +59,8 @@ async function tmdbToStremio(item, type, baseUrl) {
     _tmdbId:     item.id
   };
 }
+
+// ─── Fetch catalog from TMDB ──────────────────────────────────────────────────
 
 async function fetchCatalog(catalogId, type, skip = 0, baseUrl) {
   const page     = Math.floor(skip / 20) + 1;
@@ -67,13 +79,11 @@ async function fetchCatalog(catalogId, type, skip = 0, baseUrl) {
 
   if (!data.results) return [];
 
-  const metas = await Promise.all(
+  return Promise.all(
     data.results
       .filter(item => item.poster_path)
-      .map(item => tmdbToStremio(item, tmdbType, baseUrl))
+      .map(item => tmdbToStremio(item, tmdbType))
   );
-
-  return metas;
 }
 
 module.exports = { fetchCatalog, tmdbToStremio };
