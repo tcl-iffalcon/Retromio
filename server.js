@@ -371,8 +371,7 @@ app.get("/configure", (req, res) => {
       </div>
 
       <p class="tagline">
-        <strong>Yapay zeka</strong> ile üretilmiş retro sinema posterleri —<br>
-        <strong>Vidlink</strong> ve <strong>NetMirror</strong>'dan 1080p akış.
+        <strong>Her içerik türü için ayrı promthlarla yapay zeka tarafından hazırlanmış posterleri Vidlink ve Netmirror kullanarak sunan Nuvio ve Stremio eklentisi.</strong> —<br>
       </p>
 
       <div class="card">
