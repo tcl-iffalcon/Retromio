@@ -1,28 +1,30 @@
 const fetch = require("node-fetch");
 const crypto = require("crypto");
 
-// ─── Backblaze B2 Config ──────────────────────────────────────────────────────
-const B2_KEY_ID   = process.env.B2_KEY_ID  || "";
-const B2_APP_KEY  = process.env.B2_APP_KEY || "";
-const B2_BUCKET   = process.env.B2_BUCKET  || "retromio-posters";
-const B2_REGION   = process.env.B2_REGION  || "us-east-005";
-const B2_ENDPOINT = `https://s3.${B2_REGION}.backblazeb2.com`;
-const B2_PUBLIC   = `https://${B2_BUCKET}.s3.${B2_REGION}.backblazeb2.com`;
+// ─── Cloudinary Config ────────────────────────────────────────────────────────
+const CLD_CLOUD  = process.env.CLD_CLOUD  || "retromio";
+const CLD_KEY    = process.env.CLD_KEY    || "276591239885363";
+const CLD_SECRET = process.env.CLD_SECRET || "eTu9x75UoJR-EKsWVkh_WnTCGN0";
+const CLD_FOLDER = "posters";
+const CLD_BASE   = `https://res.cloudinary.com/${CLD_CLOUD}/image/upload/${CLD_FOLDER}`;
 
 // ─── Replicate Config ─────────────────────────────────────────────────────────
 const REPLICATE_TOKEN = process.env.REPLICATE_TOKEN || "";
-const REPLICATE_MODEL = "black-forest-labs/flux-schnell"; // ~$0.003/poster
 
-// ─── Poster versioning (bump to regenerate all) ───────────────────────────────
+// ─── Poster versioning ────────────────────────────────────────────────────────
 const POSTER_VERSION = process.env.POSTER_VERSION || "v14";
 
-// ─── Concurrency control ──────────────────────────────────────────────────────
+// ─── Concurrency & Queue ──────────────────────────────────────────────────────
 const AI_PENDING     = new Map();
 let   activeRequests = 0;
-const MAX_CONCURRENT = 1; // Replicate rate limit: 6/min under $5 credit
+const MAX_CONCURRENT = 1;
 const requestQueue   = [];
 
-// ─── Genre → Prompt style map ─────────────────────────────────────────────────
+const MIN_REQUEST_INTERVAL_MS = 11000;
+let   lastRequestTime         = 0;
+let   replicateQuotaExhausted = false;
+
+// ─── Genre map ────────────────────────────────────────────────────────────────
 const GENRE_MAP = {
   28: "action", 12: "adventure", 16: "animation", 35: "comedy",
   80: "crime", 99: "documentary", 18: "drama", 10751: "family",
@@ -57,74 +59,92 @@ const GENRE_STYLES = {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+function posterPublicId(title, year) {
+  const safe = (title || "unknown").replace(/[^a-z0-9]/gi, "_").toLowerCase().substring(0, 80);
+  return `${CLD_FOLDER}/${POSTER_VERSION}_${safe}_${year || "0"}`;
+}
+
 function posterKey(title, year) {
-  const safe = (title || "unknown")
-    .replace(/[^a-z0-9]/gi, "_")
-    .toLowerCase()
-    .substring(0, 80);
-  return `${POSTER_VERSION}_${safe}_${year || "0"}.jpg`;
+  const safe = (title || "unknown").replace(/[^a-z0-9]/gi, "_").toLowerCase().substring(0, 80);
+  return `${POSTER_VERSION}_${safe}_${year || "0"}`;
 }
 
 function posterUrl(title, year) {
-  return `${B2_PUBLIC}/${posterKey(title, year)}`;
+  return `${CLD_BASE}/${posterKey(title, year)}.jpg`;
 }
 
 function processQueue() {
-  while (requestQueue.length > 0 && activeRequests < MAX_CONCURRENT) {
+  if (requestQueue.length > 0 && activeRequests < MAX_CONCURRENT) {
+    activeRequests++;
     const next = requestQueue.shift();
-    next();
+    next().finally(() => {
+      activeRequests--;
+      processQueue();
+    });
   }
 }
 
-// ─── AWS Signature v4 for Backblaze S3-compatible API ────────────────────────
+// ─── Cloudinary helpers ───────────────────────────────────────────────────────
 
-function awsHeaders(method, key, body, contentType) {
-  const now       = new Date();
-  const amzDate   = now.toISOString().replace(/[:-]/g, "").replace(/\.\d+Z/, "Z");
-  const dateShort = amzDate.substring(0, 8);
-  const host      = `s3.${B2_REGION}.backblazeb2.com`;
-  const bodyHash  = crypto.createHash("sha256").update(body || "").digest("hex");
-
-  const canonicalHeaders = `content-type:${contentType}\nhost:${host}\nx-amz-content-sha256:${bodyHash}\nx-amz-date:${amzDate}\n`;
-  const signedHeaders    = "content-type;host;x-amz-content-sha256;x-amz-date";
-  const canonicalRequest = [method, `/${B2_BUCKET}/${key}`, "", canonicalHeaders, signedHeaders, bodyHash].join("\n");
-  const credentialScope  = `${dateShort}/${B2_REGION}/s3/aws4_request`;
-  const stringToSign     = `AWS4-HMAC-SHA256\n${amzDate}\n${credentialScope}\n${crypto.createHash("sha256").update(canonicalRequest).digest("hex")}`;
-
-  const signingKey = ["aws4_request", "s3", B2_REGION, dateShort]
-    .reduceRight((k, d) => crypto.createHmac("sha256", k).update(d).digest(), `AWS4${B2_APP_KEY}`);
-  const signature = crypto.createHmac("sha256", signingKey).update(stringToSign).digest("hex");
-
-  return {
-    "Authorization":        `AWS4-HMAC-SHA256 Credential=${B2_KEY_ID}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`,
-    "Content-Type":         contentType,
-    "x-amz-content-sha256": bodyHash,
-    "x-amz-date":           amzDate
-  };
-}
-
-async function existsInB2(key) {
+async function existsInCloudinary(title, year) {
   try {
-    const headers = awsHeaders("HEAD", key, "", "application/octet-stream");
-    const res = await fetch(`${B2_ENDPOINT}/${B2_BUCKET}/${key}`, { method: "HEAD", headers });
+    const url = posterUrl(title, year);
+    const res = await fetch(url, { method: "HEAD" });
     return res.ok;
   } catch {
     return false;
   }
 }
 
-async function uploadToB2(key, buffer) {
-  const headers = awsHeaders("PUT", key, buffer, "image/jpeg");
-  const res = await fetch(`${B2_ENDPOINT}/${B2_BUCKET}/${key}`, {
-    method: "PUT",
-    headers,
-    body: buffer
+async function uploadToCloudinary(title, year, buffer) {
+  const publicId  = posterPublicId(title, year);
+  const timestamp = Math.floor(Date.now() / 1000).toString();
+  const toSign    = `folder=${CLD_FOLDER}&public_id=${encodeURIComponent(publicId)}&timestamp=${timestamp}${CLD_SECRET}`;
+  const signature = crypto.createHash("sha256").update(toSign).digest("hex");
+
+  // Build multipart form
+  const boundary = "----RetromioB" + Date.now();
+  const CRLF     = "\r\n";
+
+  const fields = {
+    api_key:   CLD_KEY,
+    timestamp,
+    public_id: publicId,
+    folder:    CLD_FOLDER,
+    signature
+  };
+
+  let body = "";
+  for (const [k, v] of Object.entries(fields)) {
+    body += `--${boundary}${CRLF}`;
+    body += `Content-Disposition: form-data; name="${k}"${CRLF}${CRLF}`;
+    body += `${v}${CRLF}`;
+  }
+  body += `--${boundary}${CRLF}`;
+  body += `Content-Disposition: form-data; name="file"; filename="poster.jpg"${CRLF}`;
+  body += `Content-Type: image/jpeg${CRLF}${CRLF}`;
+
+  const prefix = Buffer.from(body, "binary");
+  const suffix = Buffer.from(`${CRLF}--${boundary}--${CRLF}`, "binary");
+  const full   = Buffer.concat([prefix, buffer, suffix]);
+
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLD_CLOUD}/image/upload`, {
+    method:  "POST",
+    headers: {
+      "Content-Type":   `multipart/form-data; boundary=${boundary}`,
+      "Content-Length": full.length.toString()
+    },
+    body: full
   });
+
   if (!res.ok) {
     const txt = await res.text();
-    throw new Error(`B2 upload failed ${res.status}: ${txt}`);
+    throw new Error(`Cloudinary upload failed ${res.status}: ${txt}`);
   }
-  console.log(`[B2] Uploaded: ${key}`);
+
+  const json = await res.json();
+  console.log(`[Cloudinary] Uploaded: ${json.public_id} (${json.bytes} bytes)`);
+  return json.secure_url;
 }
 
 // ─── Prompt builder ───────────────────────────────────────────────────────────
@@ -153,105 +173,109 @@ function buildPrompt(title, year, type, genreIds, overview) {
   return { prompt, styleLabel: primary };
 }
 
-// ─── AI Generation via Replicate ─────────────────────────────────────────────
+// ─── Replicate generation ─────────────────────────────────────────────────────
 
-// Track if Replicate quota is exhausted to skip further attempts this session
-let replicateQuotaExhausted = false;
-
-async function generatePoster(title, year, type, genreIds, overview) {
-  if (!REPLICATE_TOKEN) throw new Error("REPLICATE_TOKEN env variable not set");
-  if (replicateQuotaExhausted) throw new Error("Replicate quota exhausted — using TMDB fallback posters");
-
+async function _executeGenerate(title, year, type, genreIds, overview) {
   const { prompt, styleLabel } = buildPrompt(title, year, type, genreIds, overview);
   const seed = Math.abs([...(title || "x")].reduce((a, c) => a + c.charCodeAt(0), 0));
 
-  activeRequests++;
-  try {
-    console.log(`[AI] Generating poster: "${title}" | genre: ${styleLabel}`);
+  const now     = Date.now();
+  const elapsed = now - lastRequestTime;
+  if (elapsed < MIN_REQUEST_INTERVAL_MS) {
+    const wait = MIN_REQUEST_INTERVAL_MS - elapsed;
+    console.log(`[AI] Rate-limit gate: waiting ${wait}ms`);
+    await new Promise(r => setTimeout(r, wait));
+  }
+  lastRequestTime = Date.now();
 
-    // Small delay to respect Replicate rate limits (6 req/min = 1 per 10s)
+  const createRes = await fetch("https://api.replicate.com/v1/models/black-forest-labs/flux-schnell/predictions", {
+    method:  "POST",
+    headers: {
+      "Authorization": `Bearer ${REPLICATE_TOKEN}`,
+      "Content-Type":  "application/json",
+      "Prefer":        "wait"
+    },
+    body: JSON.stringify({
+      input: {
+        prompt,
+        width:               512,
+        height:              768,
+        num_inference_steps: 4,
+        seed,
+        output_format:       "jpg",
+        output_quality:      90,
+        go_fast:             true
+      }
+    })
+  });
+
+  if (!createRes.ok) {
+    const txt = await createRes.text();
+    const err  = new Error(`Replicate ${createRes.status}: ${txt.substring(0, 200)}`);
+    err.status = createRes.status;
+    throw err;
+  }
+
+  let prediction = await createRes.json();
+  console.log(`[AI] Prediction ${prediction.id} — status: ${prediction.status}`);
+
+  const maxWait = 120000;
+  const started = Date.now();
+  while (prediction.status !== "succeeded" && prediction.status !== "failed" && prediction.status !== "canceled") {
+    if (Date.now() - started > maxWait) throw new Error("Replicate timeout");
     await new Promise(r => setTimeout(r, 2000));
-
-    // Step 1: Create prediction
-    const createRes = await fetch("https://api.replicate.com/v1/models/black-forest-labs/flux-schnell/predictions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${REPLICATE_TOKEN}`,
-        "Content-Type":  "application/json",
-        "Prefer":        "wait" // wait up to 60s for result inline
-      },
-      body: JSON.stringify({
-        input: {
-          prompt,
-          width:               512,
-          height:              768,
-          num_inference_steps: 4,
-          seed,
-          output_format:       "jpg",
-          output_quality:      90,
-          go_fast:             true
-        }
-      })
+    const pollRes  = await fetch(`https://api.replicate.com/v1/predictions/${prediction.id}`, {
+      headers: { "Authorization": `Bearer ${REPLICATE_TOKEN}` }
     });
+    prediction = await pollRes.json();
+    console.log(`[AI] Polling ${prediction.id} — ${prediction.status}`);
+  }
 
-    if (!createRes.ok) {
-      const txt = await createRes.text();
-      if (createRes.status === 402) {
+  if (prediction.status !== "succeeded") {
+    throw new Error(`Replicate prediction ${prediction.status}: ${prediction.error || "unknown"}`);
+  }
+
+  const imageUrl = Array.isArray(prediction.output) ? prediction.output[0] : prediction.output;
+  if (!imageUrl) throw new Error("Replicate returned no image URL");
+
+  console.log(`[AI] Downloading: ${imageUrl}`);
+  const imgRes = await fetch(imageUrl);
+  if (!imgRes.ok) throw new Error(`Image download failed ${imgRes.status}`);
+
+  const buffer = Buffer.from(await imgRes.arrayBuffer());
+  if (buffer.length < 1000) throw new Error(`Image too small (${buffer.length} bytes)`);
+
+  console.log(`[AI] Generated: "${title}" (${buffer.length} bytes)`);
+  return buffer;
+}
+
+async function generatePoster(title, year, type, genreIds, overview) {
+  if (!REPLICATE_TOKEN)        throw new Error("REPLICATE_TOKEN not set");
+  if (replicateQuotaExhausted) throw new Error("Replicate quota exhausted");
+
+  const MAX_RETRIES = 3;
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      console.log(`[AI] Generating (attempt ${attempt}/${MAX_RETRIES}): "${title}"`);
+      return await _executeGenerate(title, year, type, genreIds, overview);
+    } catch (err) {
+      if (err.status === 402) {
         replicateQuotaExhausted = true;
-        console.warn(`[AI] ⚠️  Replicate insufficient credit (402). Falling back to TMDB posters until restart.`);
-        throw new Error(`Replicate 402: insufficient credit`);
+        console.warn(`[AI] Replicate 402 — insufficient credit. Falling back to TMDB.`);
+        throw err;
       }
-      if (createRes.status === 429) {
-        // Rate limited — wait 15s and let the queue retry naturally
-        console.warn(`[AI] ⚠️  Replicate rate limit (429). Waiting 15s before retry...`);
-        await new Promise(r => setTimeout(r, 15000));
-        throw new Error(`Replicate 429: rate limited`);
+      if (err.status === 429) {
+        if (attempt >= MAX_RETRIES) {
+          console.warn(`[AI] Replicate 429 — max retries reached for "${title}". Skipping.`);
+          throw new Error(`Replicate rate limited after ${MAX_RETRIES} attempts`);
+        }
+        const delay = 20000 * attempt;
+        console.warn(`[AI] Replicate 429. Retry ${attempt}/${MAX_RETRIES} in ${delay/1000}s…`);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
       }
-      throw new Error(`Replicate create failed ${createRes.status}: ${txt.substring(0, 200)}`);
+      throw err;
     }
-
-    let prediction = await createRes.json();
-    console.log(`[AI] Prediction ${prediction.id} — status: ${prediction.status}`);
-
-    // Step 2: Poll if not immediately succeeded (Prefer: wait might still need polling)
-    const maxWait  = 120000; // 2 min
-    const interval = 2000;
-    const started  = Date.now();
-
-    while (prediction.status !== "succeeded" && prediction.status !== "failed" && prediction.status !== "canceled") {
-      if (Date.now() - started > maxWait) throw new Error("Replicate timeout after 2 minutes");
-      await new Promise(r => setTimeout(r, interval));
-
-      const pollRes = await fetch(`https://api.replicate.com/v1/predictions/${prediction.id}`, {
-        headers: { "Authorization": `Bearer ${REPLICATE_TOKEN}` }
-      });
-      prediction = await pollRes.json();
-      console.log(`[AI] Polling ${prediction.id} — ${prediction.status}`);
-    }
-
-    if (prediction.status !== "succeeded") {
-      throw new Error(`Replicate prediction ${prediction.status}: ${prediction.error || "unknown error"}`);
-    }
-
-    // Step 3: Download the generated image
-    const imageUrl = Array.isArray(prediction.output) ? prediction.output[0] : prediction.output;
-    if (!imageUrl) throw new Error("Replicate returned no image URL");
-
-    console.log(`[AI] Downloading: ${imageUrl}`);
-    const imgRes = await fetch(imageUrl);
-    if (!imgRes.ok) throw new Error(`Image download failed ${imgRes.status}`);
-
-    const arrayBuffer = await imgRes.arrayBuffer();
-    const buffer      = Buffer.from(arrayBuffer);
-
-    if (buffer.length < 1000) throw new Error(`Image too small (${buffer.length} bytes)`);
-
-    console.log(`[AI] Generated: "${title}" (${buffer.length} bytes)`);
-    return buffer;
-
-  } finally {
-    activeRequests--;
-    processQueue();
   }
 }
 
@@ -265,18 +289,17 @@ function triggerPoster(title, year, type, genreIds, overview) {
   const promise = new Promise((resolve, reject) => {
     const task = async () => {
       try {
-        const exists = await existsInB2(key);
+        const exists = await existsInCloudinary(title, year);
         if (exists) {
-          console.log(`[AI] Cache hit in B2: ${key}`);
+          console.log(`[AI] Cache hit in Cloudinary: ${key}`);
           resolve();
           return;
         }
 
         const buf = await generatePoster(title, year, type, genreIds, overview);
-        await uploadToB2(key, buf);
-        console.log(`[AI] Stored in B2: ${key}`);
+        await uploadToCloudinary(title, year, buf);
+        console.log(`[AI] Stored in Cloudinary: ${key}`);
         resolve();
-
       } catch (err) {
         console.error(`[AI] Failed for "${title}": ${err.message}`);
         reject(err);
@@ -285,17 +308,14 @@ function triggerPoster(title, year, type, genreIds, overview) {
       }
     };
 
-    if (activeRequests < MAX_CONCURRENT) {
-      task();
-    } else {
-      requestQueue.push(task);
-    }
+    requestQueue.push(task);
+    processQueue();
   });
 
   AI_PENDING.set(key, promise);
 }
 
-// ─── Status helper ────────────────────────────────────────────────────────────
+// ─── Status ───────────────────────────────────────────────────────────────────
 
 function getQueueStatus() {
   return {
@@ -303,20 +323,27 @@ function getQueueStatus() {
     queued:         requestQueue.length,
     pending:        AI_PENDING.size,
     max:            MAX_CONCURRENT,
-    provider:       "Replicate (flux-schnell)",
+    provider:       "Replicate + Cloudinary",
     quotaExhausted: replicateQuotaExhausted
   };
+}
+
+// ─── Exports (B2 compat shims for server.js) ──────────────────────────────────
+// server.js references existsInB2 and B2_PUBLIC — provide shims so it still works
+
+async function existsInB2(title, year) {
+  return existsInCloudinary(title, year);
 }
 
 module.exports = {
   triggerPoster,
   posterUrl,
   posterKey,
-  existsInB2,
-  uploadToB2,
+  existsInB2,         // shim
+  uploadToB2: uploadToCloudinary, // shim
   generatePoster,
   getQueueStatus,
-  B2_PUBLIC,
+  B2_PUBLIC: CLD_BASE, // shim
   AI_PENDING,
   MAX_CONCURRENT,
   requestQueue
