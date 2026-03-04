@@ -22,7 +22,8 @@ let   activeRequests = 0;
 const MAX_CONCURRENT = 1;
 const requestQueue   = [];
 
-// Replicate: 6 req/min free tier → enforce 11s between requests
+// Replicate free tier: 6 req/min → enforce 11s between requests
+// FIX: This is now only enforced inside _executeGenerate, not bypassed by retries
 const MIN_REQUEST_INTERVAL_MS = 11000;
 let   lastRequestTime         = 0;
 
@@ -74,11 +75,17 @@ return `${B2_PUBLIC}/${posterKey(title, year)}`;
 }
 
 // ─── Queue processor ──────────────────────────────────────────────────────────
+// FIX: processQueue is the only place that increments activeRequests,
+//      so concurrent slot management is centralized and can’t be bypassed.
 
 function processQueue() {
 if (requestQueue.length > 0 && activeRequests < MAX_CONCURRENT) {
+activeRequests++;
 const next = requestQueue.shift();
-next();
+next().finally(() => {
+activeRequests–;
+processQueue(); // drain next item after current finishes
+});
 }
 }
 
@@ -102,10 +109,10 @@ const signingKey = [“aws4_request”, “s3”, B2_REGION, dateShort]
 const signature = crypto.createHmac(“sha256”, signingKey).update(stringToSign).digest(“hex”);
 
 return {
-“Authorization”:        `AWS4-HMAC-SHA256 Credential=${B2_KEY_ID}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`,
-“Content-Type”:         contentType,
-“x-amz-content-sha256”: bodyHash,
-“x-amz-date”:           amzDate
+“Authorization”:         `AWS4-HMAC-SHA256 Credential=${B2_KEY_ID}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`,
+“Content-Type”:          contentType,
+“x-amz-content-sha256”:  bodyHash,
+“x-amz-date”:            amzDate
 };
 }
 
@@ -164,16 +171,16 @@ return { prompt, styleLabel: primary };
 let replicateQuotaExhausted = false;
 
 const MAX_RETRIES    = 3;
-const RETRY_DELAY_MS = 20000; // 20s on 429 (well past the 10s rate-limit window)
+const RETRY_DELAY_MS = 20000; // 20s base, exponential backoff
 
-async function generatePoster(title, year, type, genreIds, overview, attempt = 1) {
-if (!REPLICATE_TOKEN)        throw new Error(“REPLICATE_TOKEN env variable not set”);
-if (replicateQuotaExhausted) throw new Error(“Replicate quota exhausted — using TMDB fallback posters”);
-
+// FIX: _executeGenerate handles a single HTTP attempt only.
+//      Retries are done by the caller (generatePoster) as a simple loop,
+//      so activeRequests is never double-counted or prematurely released.
+async function _executeGenerate(title, year, type, genreIds, overview) {
 const { prompt, styleLabel } = buildPrompt(title, year, type, genreIds, overview);
 const seed = Math.abs([…(title || “x”)].reduce((a, c) => a + c.charCodeAt(0), 0));
 
-// ── Rate-limit gate: enforce minimum interval between requests ──────────────
+// Enforce minimum interval between Replicate requests
 const now     = Date.now();
 const elapsed = now - lastRequestTime;
 if (elapsed < MIN_REQUEST_INTERVAL_MS) {
@@ -183,87 +190,62 @@ await new Promise(r => setTimeout(r, wait));
 }
 lastRequestTime = Date.now();
 
-activeRequests++;
-try {
-console.log(`[AI] Generating poster (attempt ${attempt}/${MAX_RETRIES}): "${title}" | genre: ${styleLabel}`);
-
-```
-// Step 1: Create prediction
-const createRes = await fetch("https://api.replicate.com/v1/models/black-forest-labs/flux-schnell/predictions", {
-  method: "POST",
-  headers: {
-    "Authorization": `Bearer ${REPLICATE_TOKEN}`,
-    "Content-Type":  "application/json",
-    "Prefer":        "wait"
-  },
-  body: JSON.stringify({
-    input: {
-      prompt,
-      width:               512,
-      height:              768,
-      num_inference_steps: 4,
-      seed,
-      output_format:       "jpg",
-      output_quality:      90,
-      go_fast:             true
-    }
-  })
+const createRes = await fetch(“https://api.replicate.com/v1/models/black-forest-labs/flux-schnell/predictions”, {
+method: “POST”,
+headers: {
+“Authorization”: `Bearer ${REPLICATE_TOKEN}`,
+“Content-Type”:  “application/json”,
+“Prefer”:        “wait”
+},
+body: JSON.stringify({
+input: {
+prompt,
+width:               512,
+height:              768,
+num_inference_steps: 4,
+seed,
+output_format:       “jpg”,
+output_quality:      90,
+go_fast:             true
+}
+})
 });
 
-// ── Handle error responses ────────────────────────────────────────────────
 if (!createRes.ok) {
-  const txt = await createRes.text();
-
-  if (createRes.status === 402) {
-    replicateQuotaExhausted = true;
-    console.warn(`[AI] ⚠️  Replicate insufficient credit (402). Falling back to TMDB posters until restart.`);
-    throw new Error(`Replicate 402: insufficient credit`);
-  }
-
-  if (createRes.status === 429) {
-    if (attempt >= MAX_RETRIES) {
-      console.warn(`[AI] ⚠️  Replicate rate limit (429) — max retries reached for "${title}". Skipping.`);
-      throw new Error(`Replicate 429: rate limited after ${MAX_RETRIES} attempts`);
-    }
-    // Exponential backoff: 20s, 40s, 80s …
-    const delay = RETRY_DELAY_MS * attempt;
-    console.warn(`[AI] ⚠️  Replicate rate limit (429). Retry ${attempt}/${MAX_RETRIES} in ${delay / 1000}s…`);
-    activeRequests--;           // release the slot while we wait
-    processQueue();             // let another task run if one is queued
-    await new Promise(r => setTimeout(r, delay));
-    // Re-enter generatePoster (will re-acquire activeRequests slot)
-    return generatePoster(title, year, type, genreIds, overview, attempt + 1);
-  }
-
-  throw new Error(`Replicate create failed ${createRes.status}: ${txt.substring(0, 200)}`);
+const txt = await createRes.text();
+const err  = new Error(`Replicate ${createRes.status}: ${txt.substring(0, 200)}`);
+err.status = createRes.status;
+throw err;
 }
 
 let prediction = await createRes.json();
 console.log(`[AI] Prediction ${prediction.id} — status: ${prediction.status}`);
 
-// Step 2: Poll if needed
+// Poll until done
 const maxWait  = 120000;
 const interval = 2000;
 const started  = Date.now();
 
-while (prediction.status !== "succeeded" && prediction.status !== "failed" && prediction.status !== "canceled") {
-  if (Date.now() - started > maxWait) throw new Error("Replicate timeout after 2 minutes");
-  await new Promise(r => setTimeout(r, interval));
+while (prediction.status !== “succeeded” && prediction.status !== “failed” && prediction.status !== “canceled”) {
+if (Date.now() - started > maxWait) throw new Error(“Replicate timeout after 2 minutes”);
+await new Promise(r => setTimeout(r, interval));
 
-  const pollRes = await fetch(`https://api.replicate.com/v1/predictions/${prediction.id}`, {
-    headers: { "Authorization": `Bearer ${REPLICATE_TOKEN}` }
-  });
-  prediction = await pollRes.json();
-  console.log(`[AI] Polling ${prediction.id} — ${prediction.status}`);
+```
+const pollRes = await fetch(`https://api.replicate.com/v1/predictions/${prediction.id}`, {
+  headers: { "Authorization": `Bearer ${REPLICATE_TOKEN}` }
+});
+prediction = await pollRes.json();
+console.log(`[AI] Polling ${prediction.id} — ${prediction.status}`);
+```
+
 }
 
-if (prediction.status !== "succeeded") {
-  throw new Error(`Replicate prediction ${prediction.status}: ${prediction.error || "unknown error"}`);
+if (prediction.status !== “succeeded”) {
+throw new Error(`Replicate prediction ${prediction.status}: ${prediction.error || "unknown error"}`);
 }
 
-// Step 3: Download generated image
 const imageUrl = Array.isArray(prediction.output) ? prediction.output[0] : prediction.output;
-if (!imageUrl) throw new Error("Replicate returned no image URL");
+if (!imageUrl) throw new Error(“Replicate returned no image URL”);
 
 console.log(`[AI] Downloading: ${imageUrl}`);
 const imgRes = await fetch(imageUrl);
@@ -271,28 +253,61 @@ if (!imgRes.ok) throw new Error(`Image download failed ${imgRes.status}`);
 
 const arrayBuffer = await imgRes.arrayBuffer();
 const buffer      = Buffer.from(arrayBuffer);
-
 if (buffer.length < 1000) throw new Error(`Image too small (${buffer.length} bytes)`);
 
 console.log(`[AI] Generated: "${title}" (${buffer.length} bytes)`);
 return buffer;
+}
+
+// FIX: generatePoster is now a simple retry loop — no recursive calls,
+//      no manual activeRequests manipulation. The slot is held for the
+//      entire duration including retries, which is correct since the
+//      queue slot IS being used while we wait.
+async function generatePoster(title, year, type, genreIds, overview) {
+if (!REPLICATE_TOKEN)        throw new Error(“REPLICATE_TOKEN env variable not set”);
+if (replicateQuotaExhausted) throw new Error(“Replicate quota exhausted — using TMDB fallback posters”);
+
+for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+try {
+console.log(`[AI] Generating poster (attempt ${attempt}/${MAX_RETRIES}): "${title}"`);
+return await _executeGenerate(title, year, type, genreIds, overview);
+
+```
+} catch (err) {
+  if (err.status === 402) {
+    replicateQuotaExhausted = true;
+    console.warn(`[AI] ⚠️  Replicate insufficient credit (402). Falling back to TMDB posters.`);
+    throw err;
+  }
+
+  if (err.status === 429) {
+    if (attempt >= MAX_RETRIES) {
+      console.warn(`[AI] ⚠️  Replicate rate limit (429) — max retries reached for "${title}". Skipping.`);
+      throw new Error(`Replicate 429: rate limited after ${MAX_RETRIES} attempts`);
+    }
+    const delay = RETRY_DELAY_MS * attempt; // 20s, 40s, 60s
+    console.warn(`[AI] ⚠️  Replicate 429. Retry ${attempt}/${MAX_RETRIES} in ${delay / 1000}s…`);
+    await new Promise(r => setTimeout(r, delay));
+    continue;
+  }
+
+  // Any other error: propagate immediately
+  throw err;
+}
 ```
 
-} finally {
-// Only decrement if we didn’t already release the slot during 429 retry
-if (activeRequests > 0) {
-activeRequests–;
-}
-processQueue();
 }
 }
 
 // ─── Main: trigger background generation ─────────────────────────────────────
+// FIX: triggerPoster only pushes to queue, never calls processQueue() directly.
+//      processQueue() is called only from: here after push, and from the
+//      finally block in processQueue itself — preventing double-drain.
 
 function triggerPoster(title, year, type, genreIds, overview) {
 if (!title) return;
 const key = posterKey(title, year);
-if (AI_PENDING.has(key)) return;   // already in-flight or queued
+if (AI_PENDING.has(key)) return; // already queued or in-flight
 
 const promise = new Promise((resolve, reject) => {
 const task = async () => {
@@ -318,9 +333,8 @@ return;
   }
 };
 
-// Always push to queue — processQueue() will drain it correctly
 requestQueue.push(task);
-processQueue();
+processQueue(); // only called once per new item
 ```
 
 });
