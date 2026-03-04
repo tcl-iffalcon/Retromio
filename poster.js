@@ -2,25 +2,24 @@ const fetch = require("node-fetch");
 const crypto = require("crypto");
 
 // ─── Backblaze B2 Config ──────────────────────────────────────────────────────
-const B2_KEY_ID  = process.env.B2_KEY_ID  || "";
-const B2_APP_KEY = process.env.B2_APP_KEY || "";
-const B2_BUCKET  = process.env.B2_BUCKET  || "retromio-posters";
-const B2_REGION  = process.env.B2_REGION  || "us-east-005";
+const B2_KEY_ID   = process.env.B2_KEY_ID  || "";
+const B2_APP_KEY  = process.env.B2_APP_KEY || "";
+const B2_BUCKET   = process.env.B2_BUCKET  || "retromio-posters";
+const B2_REGION   = process.env.B2_REGION  || "us-east-005";
 const B2_ENDPOINT = `https://s3.${B2_REGION}.backblazeb2.com`;
 const B2_PUBLIC   = `https://${B2_BUCKET}.s3.${B2_REGION}.backblazeb2.com`;
 
-// ─── Hugging Face Config ──────────────────────────────────────────────────────
-const HF_TOKEN = process.env.HF_TOKEN || "";
-const HF_MODEL = "black-forest-labs/FLUX.1-schnell";
-const HF_API   = `https://router.huggingface.co/hf-inference/models/${HF_MODEL}`;
+// ─── Replicate Config ─────────────────────────────────────────────────────────
+const REPLICATE_TOKEN = process.env.REPLICATE_TOKEN || "";
+const REPLICATE_MODEL = "black-forest-labs/flux-schnell"; // ~$0.003/poster
 
 // ─── Poster versioning (bump to regenerate all) ───────────────────────────────
 const POSTER_VERSION = process.env.POSTER_VERSION || "v14";
 
 // ─── Concurrency control ──────────────────────────────────────────────────────
-const AI_PENDING    = new Map();
+const AI_PENDING     = new Map();
 let   activeRequests = 0;
-const MAX_CONCURRENT = 2;
+const MAX_CONCURRENT = 3; // Replicate handles concurrency better
 const requestQueue   = [];
 
 // ─── Genre → Prompt style map ─────────────────────────────────────────────────
@@ -80,11 +79,11 @@ function processQueue() {
 // ─── AWS Signature v4 for Backblaze S3-compatible API ────────────────────────
 
 function awsHeaders(method, key, body, contentType) {
-  const now      = new Date();
-  const amzDate  = now.toISOString().replace(/[:-]/g, "").replace(/\.\d+Z/, "Z");
+  const now       = new Date();
+  const amzDate   = now.toISOString().replace(/[:-]/g, "").replace(/\.\d+Z/, "Z");
   const dateShort = amzDate.substring(0, 8);
-  const host     = `s3.${B2_REGION}.backblazeb2.com`;
-  const bodyHash = crypto.createHash("sha256").update(body || "").digest("hex");
+  const host      = `s3.${B2_REGION}.backblazeb2.com`;
+  const bodyHash  = crypto.createHash("sha256").update(body || "").digest("hex");
 
   const canonicalHeaders = `content-type:${contentType}\nhost:${host}\nx-amz-content-sha256:${bodyHash}\nx-amz-date:${amzDate}\n`;
   const signedHeaders    = "content-type;host;x-amz-content-sha256;x-amz-date";
@@ -97,10 +96,10 @@ function awsHeaders(method, key, body, contentType) {
   const signature = crypto.createHmac("sha256", signingKey).update(stringToSign).digest("hex");
 
   return {
-    "Authorization":       `AWS4-HMAC-SHA256 Credential=${B2_KEY_ID}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`,
-    "Content-Type":        contentType,
+    "Authorization":        `AWS4-HMAC-SHA256 Credential=${B2_KEY_ID}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`,
+    "Content-Type":         contentType,
     "x-amz-content-sha256": bodyHash,
-    "x-amz-date":          amzDate
+    "x-amz-date":           amzDate
   };
 }
 
@@ -154,14 +153,10 @@ function buildPrompt(title, year, type, genreIds, overview) {
   return { prompt, styleLabel: primary };
 }
 
-// ─── AI Generation via Hugging Face ──────────────────────────────────────────
-
-// Track if HF quota is exhausted to skip further attempts this session
-let hfQuotaExhausted = false;
+// ─── AI Generation via Replicate ─────────────────────────────────────────────
 
 async function generatePoster(title, year, type, genreIds, overview) {
-  if (!HF_TOKEN) throw new Error("HF_TOKEN env variable not set");
-  if (hfQuotaExhausted) throw new Error("HuggingFace quota exhausted — using fallback posters");
+  if (!REPLICATE_TOKEN) throw new Error("REPLICATE_TOKEN env variable not set");
 
   const { prompt, styleLabel } = buildPrompt(title, year, type, genreIds, overview);
   const seed = Math.abs([...(title || "x")].reduce((a, c) => a + c.charCodeAt(0), 0));
@@ -169,43 +164,69 @@ async function generatePoster(title, year, type, genreIds, overview) {
   activeRequests++;
   try {
     console.log(`[AI] Generating poster: "${title}" | genre: ${styleLabel}`);
-    console.log(`[AI] Prompt: ${prompt.substring(0, 120)}...`);
 
-    const hfRes = await fetch(HF_API, {
+    // Step 1: Create prediction
+    const createRes = await fetch("https://api.replicate.com/v1/models/black-forest-labs/flux-schnell/predictions", {
       method: "POST",
       headers: {
-        "Authorization":    `Bearer ${HF_TOKEN}`,
-        "Content-Type":     "application/json",
-        "x-wait-for-model": "true"
+        "Authorization": `Bearer ${REPLICATE_TOKEN}`,
+        "Content-Type":  "application/json",
+        "Prefer":        "wait" // wait up to 60s for result inline
       },
       body: JSON.stringify({
-        inputs: prompt,
-        parameters: {
-          width:                512,
-          height:               768,
-          num_inference_steps:  4,
-          seed
+        input: {
+          prompt,
+          width:               512,
+          height:              768,
+          num_inference_steps: 4,
+          seed,
+          output_format:       "jpg",
+          output_quality:      90,
+          go_fast:             true
         }
-      }),
-      timeout: 120000
+      })
     });
 
-    if (!hfRes.ok) {
-      const txt = await hfRes.text();
-      // Mark quota exhausted so we stop hammering the API
-      if (hfRes.status === 402 || hfRes.status === 429) {
-        hfQuotaExhausted = true;
-        console.warn(`[AI] ⚠️  HuggingFace quota exhausted (${hfRes.status}). Falling back to TMDB posters until restart.`);
-      }
-      throw new Error(`HuggingFace ${hfRes.status}: ${txt.substring(0, 200)}`);
+    if (!createRes.ok) {
+      const txt = await createRes.text();
+      throw new Error(`Replicate create failed ${createRes.status}: ${txt.substring(0, 200)}`);
     }
 
-    const arrayBuffer = await hfRes.arrayBuffer();
+    let prediction = await createRes.json();
+    console.log(`[AI] Prediction ${prediction.id} — status: ${prediction.status}`);
+
+    // Step 2: Poll if not immediately succeeded (Prefer: wait might still need polling)
+    const maxWait  = 120000; // 2 min
+    const interval = 2000;
+    const started  = Date.now();
+
+    while (prediction.status !== "succeeded" && prediction.status !== "failed" && prediction.status !== "canceled") {
+      if (Date.now() - started > maxWait) throw new Error("Replicate timeout after 2 minutes");
+      await new Promise(r => setTimeout(r, interval));
+
+      const pollRes = await fetch(`https://api.replicate.com/v1/predictions/${prediction.id}`, {
+        headers: { "Authorization": `Bearer ${REPLICATE_TOKEN}` }
+      });
+      prediction = await pollRes.json();
+      console.log(`[AI] Polling ${prediction.id} — ${prediction.status}`);
+    }
+
+    if (prediction.status !== "succeeded") {
+      throw new Error(`Replicate prediction ${prediction.status}: ${prediction.error || "unknown error"}`);
+    }
+
+    // Step 3: Download the generated image
+    const imageUrl = Array.isArray(prediction.output) ? prediction.output[0] : prediction.output;
+    if (!imageUrl) throw new Error("Replicate returned no image URL");
+
+    console.log(`[AI] Downloading: ${imageUrl}`);
+    const imgRes = await fetch(imageUrl);
+    if (!imgRes.ok) throw new Error(`Image download failed ${imgRes.status}`);
+
+    const arrayBuffer = await imgRes.arrayBuffer();
     const buffer      = Buffer.from(arrayBuffer);
 
-    if (buffer.length < 1000) {
-      throw new Error(`Image too small (${buffer.length} bytes) — generation likely failed`);
-    }
+    if (buffer.length < 1000) throw new Error(`Image too small (${buffer.length} bytes)`);
 
     console.log(`[AI] Generated: "${title}" (${buffer.length} bytes)`);
     return buffer;
@@ -221,12 +242,11 @@ async function generatePoster(title, year, type, genreIds, overview) {
 function triggerPoster(title, year, type, genreIds, overview) {
   if (!title) return;
   const key = posterKey(title, year);
-  if (AI_PENDING.has(key)) return; // already in flight
+  if (AI_PENDING.has(key)) return;
 
   const promise = new Promise((resolve, reject) => {
     const task = async () => {
       try {
-        // Check B2 cache first
         const exists = await existsInB2(key);
         if (exists) {
           console.log(`[AI] Cache hit in B2: ${key}`);
@@ -257,15 +277,15 @@ function triggerPoster(title, year, type, genreIds, overview) {
   AI_PENDING.set(key, promise);
 }
 
-// ─── Status helper (for /poster-status endpoint) ──────────────────────────────
+// ─── Status helper ────────────────────────────────────────────────────────────
 
 function getQueueStatus() {
   return {
-    active:         activeRequests,
-    queued:         requestQueue.length,
-    pending:        AI_PENDING.size,
-    max:            MAX_CONCURRENT,
-    quotaExhausted: hfQuotaExhausted
+    active:   activeRequests,
+    queued:   requestQueue.length,
+    pending:  AI_PENDING.size,
+    max:      MAX_CONCURRENT,
+    provider: "Replicate (flux-schnell)"
   };
 }
 
