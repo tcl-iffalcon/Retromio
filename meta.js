@@ -1,10 +1,10 @@
 const fetch = require("node-fetch");
-const { triggerPoster, posterUrl } = require("./poster");
+const { triggerPoster, posterKey } = require("./poster");
 
 const TMDB_API_KEY = "439c478a771f35c05022f9feabcca01c";
 const TMDB_BASE = "https://api.themoviedb.org/3";
 
-async function fetchMeta(id, type) {
+async function fetchMeta(id, type, baseUrl) {
   try {
     let tmdbId = null;
     const isMovie = type === "movie";
@@ -37,14 +37,29 @@ async function fetchMeta(id, type) {
       ? item.credits.cast.slice(0, 5).map(c => c.name)
       : [];
 
-    // Trigger AI poster generation in background (non-blocking)
+    const tmdbPoster = item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : null;
+
+    // Build /ai-poster URL — Stremio calls this, endpoint handles generation + redirect
+    const params = new URLSearchParams({
+      title: title || "",
+      year: year || "",
+      type: isMovie ? "movie" : "series",
+      genres: genreIds,
+      overview: (item.overview || "").substring(0, 200),
+      fallback: tmdbPoster || ""
+    });
+    const posterEndpointUrl = baseUrl
+      ? `${baseUrl}/ai-poster?${params.toString()}`
+      : tmdbPoster;
+
+    // Also trigger background generation so it's ready next time
     triggerPoster(title, year, isMovie ? "movie" : "series", genreIds, item.overview || "");
 
     const meta = {
       id,
       type,
       name: title,
-      poster: posterUrl(title, year),
+      poster: posterEndpointUrl,
       background: item.backdrop_path ? `https://image.tmdb.org/t/p/w1280${item.backdrop_path}` : null,
       description: item.overview,
       releaseInfo: year,
