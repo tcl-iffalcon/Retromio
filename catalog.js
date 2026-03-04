@@ -24,7 +24,7 @@ try {
 const exists = await existsInB2(key);
 if (exists) {
 poster = `${B2_PUBLIC}/${key}`;
-console.log(`[Catalog] AI poster ready for "${title}" → B2`);
+console.log(`[Catalog] AI poster ready for "${title}" -> B2`);
 }
 } catch {
 // B2 check failed — fall through to TMDB poster
