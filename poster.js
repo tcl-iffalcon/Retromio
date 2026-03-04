@@ -101,7 +101,7 @@ async function existsInCloudinary(title, year) {
 async function uploadToCloudinary(title, year, buffer) {
   const publicId  = posterPublicId(title, year);
   const timestamp = Math.floor(Date.now() / 1000).toString();
-  // Cloudinary signature: alphabetical order, no encoding, append secret
+  // Cloudinary signature: sorted params, no folder field, append secret directly
   const toSign    = `public_id=${publicId}&timestamp=${timestamp}${CLD_SECRET}`;
   const signature = crypto.createHash("sha256").update(toSign).digest("hex");
 
@@ -113,7 +113,6 @@ async function uploadToCloudinary(title, year, buffer) {
     api_key:   CLD_KEY,
     timestamp,
     public_id: publicId,
-    folder:    CLD_FOLDER,
     signature
   };
 
