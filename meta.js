@@ -1,16 +1,10 @@
 const fetch = require("node-fetch");
+const { triggerPoster, posterUrl } = require("./poster");
+
 const TMDB_API_KEY = "439c478a771f35c05022f9feabcca01c";
 const TMDB_BASE = "https://api.themoviedb.org/3";
 
-const POSTER_VERSION = "v13";
-const B2_BUCKET_URL = "https://retromio-posters.s3.us-east-005.backblazeb2.com";
-
-function posterKey(title, year) {
-  const safe = (title || "unknown").replace(/[^a-z0-9]/gi, "_").toLowerCase();
-  return `${POSTER_VERSION}_${safe}_${year || "0"}.jpg`;
-}
-
-async function fetchMeta(id, type, baseUrl) {
+async function fetchMeta(id, type) {
   try {
     let tmdbId = null;
     const isMovie = type === "movie";
@@ -43,36 +37,21 @@ async function fetchMeta(id, type, baseUrl) {
       ? item.credits.cast.slice(0, 5).map(c => c.name)
       : [];
 
-    // Use B2 URL directly, trigger generation in background
-    const key = posterKey(title, year);
-    const b2PosterUrl = `${B2_BUCKET_URL}/${key}`;
-
-    if (baseUrl && title) {
-      const params = new URLSearchParams({
-        title: title || "",
-        year: year || "",
-        type: isMovie ? "movie" : "series",
-        genres: genreIds,
-        overview: (item.overview || "").substring(0, 200),
-        fallback: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : ""
-      });
-      fetch(`${baseUrl}/ai-poster?${params.toString()}`).catch(() => {});
-    }
+    // Trigger AI poster generation in background (non-blocking)
+    triggerPoster(title, year, isMovie ? "movie" : "series", genreIds, item.overview || "");
 
     const meta = {
       id,
       type,
       name: title,
-      poster: b2PosterUrl,
+      poster: posterUrl(title, year),
       background: item.backdrop_path ? `https://image.tmdb.org/t/p/w1280${item.backdrop_path}` : null,
       description: item.overview,
       releaseInfo: year,
       imdbRating: item.vote_average ? item.vote_average.toFixed(1) : null,
       genres,
       cast,
-      runtime: isMovie
-        ? (item.runtime ? `${item.runtime} min` : null)
-        : null,
+      runtime: isMovie ? (item.runtime ? `${item.runtime} min` : null) : null,
     };
 
     if (!isMovie && item.seasons) {
