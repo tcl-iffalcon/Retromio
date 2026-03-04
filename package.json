@@ -1,7 +1,7 @@
 {
   "name": "retromio",
   "version": "1.1.0",
-  "description": "Retromio — Stremio addon with AI retro posters, Vidlink & NetMirror streams",
+  "description": "Her içerik türü için ayrı promthlarla AI tarafından hazırlanmış posterleri Vidlink ve Netmirror kullanarak sunan Nuvio ve Stremio eklentisi.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
