@@ -314,7 +314,7 @@ async function handleCatalog(req, res) {
   const skip = parseInt(req.query.skip || req.params.extra?.replace("skip=", "") || "0");
   console.log(`[Catalog] type=${type} id=${id} skip=${skip}`);
   try {
-    const metas = await fetchCatalog(id, type, skip, baseUrl, true);
+    const metas = await fetchCatalog(id, type, skip, baseUrl, false);
     res.json({ metas });
   } catch (err) {
     console.error(`[Catalog] Error: ${err.message}`);
