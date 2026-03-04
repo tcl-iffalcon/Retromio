@@ -25,6 +25,11 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
+// Serve background image for configure page
+app.get("/kibar-feyzo.jpg", (req, res) => {
+  res.sendFile(path.join(__dirname, "kibar-feyzo.jpg"));
+});
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function getBaseUrl(req) {
@@ -37,7 +42,6 @@ function getBaseUrl(req) {
 app.get("/configure", (req, res) => {
   const baseUrl     = getBaseUrl(req);
   const manifestUrl = `${baseUrl}/manifest.json`;
-  const stremioUrl  = manifestUrl.replace(/^https?:\/\//, "stremio://");
 
   res.send(`<!DOCTYPE html>
 <html lang="en">
@@ -45,130 +49,156 @@ app.get("/configure", (req, res) => {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Retromio</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,600;1,300;1,600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      background: #0a0a0f;
-      color: #e8e0d5;
-      font-family: Georgia, serif;
       min-height: 100vh;
+      background: #06060e;
+      font-family: 'DM Sans', sans-serif;
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 2rem;
+      overflow: hidden;
     }
-    .container { max-width: 500px; width: 100%; text-align: center; }
-    .logo { width: 90px; margin-bottom: 1rem; filter: sepia(.4) brightness(.9); }
-    h1 {
-      font-size: 2.2rem;
-      letter-spacing: .2em;
-      text-transform: uppercase;
-      color: #c9a84c;
-      margin-bottom: .25rem;
+    .bg-img {
+      position: fixed; inset: 0;
+      background-image: url('/kibar-feyzo.jpg');
+      background-size: cover;
+      background-position: center;
+      opacity: 0.32;
+      filter: grayscale(20%);
+      transform: scale(1.04);
     }
-    .tagline { color: #7a6e60; font-style: italic; margin-bottom: 2rem; }
+    .bg-overlay {
+      position: fixed; inset: 0;
+      background:
+        linear-gradient(to right, rgba(6,6,14,0.35) 0%, rgba(6,6,14,0.75) 60%, rgba(6,6,14,0.92) 100%),
+        linear-gradient(to bottom, rgba(6,6,14,0.3) 0%, transparent 30%, transparent 70%, rgba(6,6,14,0.6) 100%);
+    }
+    .grain {
+      position: fixed; inset: 0; opacity: 0.03;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)'/%3E%3C/svg%3E");
+      pointer-events: none;
+    }
+    .wrap {
+      position: relative; z-index: 10;
+      display: flex; align-items: center; justify-content: flex-end;
+      width: 100%; max-width: 1100px; min-height: 100vh; padding: 3rem;
+    }
+    .panel { width: 100%; max-width: 390px; animation: fadeIn 1.2s cubic-bezier(0.16,1,0.3,1) both; }
+    .brand { margin-bottom: 2.5rem; }
+    .brand-eyebrow {
+      font-size: 0.62rem; letter-spacing: 0.28em; text-transform: uppercase;
+      color: rgba(210,175,95,0.55); margin-bottom: 0.75rem;
+    }
+    .brand-name {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 4.2rem; font-weight: 600;
+      color: #f5ede0; line-height: 0.88; letter-spacing: -0.02em;
+    }
+    .brand-name span { font-style: italic; color: #d2af5f; }
+    .brand-line { width: 28px; height: 1px; background: rgba(210,175,95,0.35); margin: 1.25rem 0; }
+    .brand-desc { font-size: 0.82rem; line-height: 1.75; color: rgba(255,255,255,0.35); font-weight: 300; }
+    .brand-desc strong { color: rgba(255,255,255,0.62); font-weight: 400; }
     .card {
-      background: #13131a;
-      border: 1px solid #2a2520;
-      border-radius: 10px;
-      padding: 2rem;
-    }
-    .desc {
-      font-size: .9rem;
-      color: #a09080;
-      margin-bottom: 1.5rem;
-      line-height: 1.7;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 16px; padding: 1.75rem;
+      backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+      box-shadow: 0 0 0 1px rgba(255,255,255,0.02) inset, 0 32px 64px rgba(0,0,0,0.5);
     }
     .btn {
-      display: block;
-      width: 100%;
-      padding: 1rem;
-      background: #c9a84c;
-      color: #0a0a0f;
-      border: none;
-      border-radius: 6px;
-      font-size: 1rem;
-      font-family: Georgia, serif;
-      font-weight: bold;
-      letter-spacing: .1em;
-      text-transform: uppercase;
-      cursor: pointer;
-      text-decoration: none;
-      margin-bottom: .75rem;
-      transition: background .2s;
+      display: flex; align-items: center; justify-content: center; gap: 0.55rem;
+      width: 100%; padding: 0.85rem 1.25rem; border-radius: 10px;
+      font-family: 'DM Sans', sans-serif; font-size: 0.875rem; font-weight: 500;
+      letter-spacing: 0.01em; cursor: pointer; text-decoration: none;
+      transition: all 0.18s ease; border: none; margin-bottom: 0.625rem;
     }
-    .btn:hover { background: #e0bc5a; }
+    .btn-primary {
+      background: linear-gradient(135deg, #d2af5f 0%, #a8862a 100%);
+      color: #06060e; box-shadow: 0 2px 16px rgba(210,175,95,0.2);
+    }
+    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 24px rgba(210,175,95,0.35); filter: brightness(1.08); }
     .btn-secondary {
-      background: transparent;
-      border: 1px solid #c9a84c;
-      color: #c9a84c;
+      background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.52);
+      border: 1px solid rgba(255,255,255,0.08);
     }
-    .btn-secondary:hover { background: #c9a84c22; }
-    .url-box {
-      padding: .75rem;
-      background: #0d0d12;
-      border: 1px solid #2a2520;
-      border-radius: 6px;
-      font-size: .72rem;
-      color: #7a6e60;
-      word-break: break-all;
-      margin-top: .75rem;
-      cursor: pointer;
-      transition: border-color .2s;
+    .btn-secondary:hover { background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.78); border-color: rgba(255,255,255,0.13); transform: translateY(-1px); }
+    .url-section { margin-top: 1.25rem; padding-top: 1.25rem; border-top: 1px solid rgba(255,255,255,0.05); }
+    .url-label { font-size: 0.6rem; letter-spacing: 0.2em; text-transform: uppercase; color: rgba(255,255,255,0.18); margin-bottom: 0.5rem; }
+    .url-row {
+      display: flex; align-items: center; gap: 0.6rem;
+      background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.05);
+      border-radius: 8px; padding: 0.65rem 0.875rem;
+      cursor: pointer; transition: border-color 0.15s;
     }
-    .url-box:hover { border-color: #c9a84c66; }
-    .badges {
-      display: flex;
-      gap: .5rem;
-      justify-content: center;
-      flex-wrap: wrap;
-      margin-top: 1.5rem;
+    .url-row:hover { border-color: rgba(210,175,95,0.2); }
+    .url-row:hover .copy-svg { opacity: 0.65; }
+    .url-text {
+      flex: 1; font-size: 0.64rem; color: rgba(255,255,255,0.22);
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
-    .badge {
-      padding: .3rem .8rem;
-      border: 1px solid #2a2520;
-      border-radius: 20px;
-      font-size: .75rem;
-      color: #7a6e60;
-    }
-    .badge.ai { border-color: #c9a84c55; color: #c9a84c; }
-    .divider { border: none; border-top: 1px solid #2a2520; margin: 1.25rem 0; }
-    #copy-msg { font-size: .75rem; color: #c9a84c; height: 1rem; margin-top: .4rem; }
+    .copy-svg { width: 13px; height: 13px; fill: rgba(255,255,255,0.22); flex-shrink: 0; opacity: 0.38; transition: opacity 0.15s; }
+    .copied { font-size: 0.64rem; color: #d2af5f; text-align: right; margin-top: 0.35rem; opacity: 0; transition: opacity 0.25s; height: 0.9rem; }
+    .copied.on { opacity: 1; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+    @media (max-width: 700px) { .wrap { justify-content: center; padding: 1.5rem; min-height: 100svh; } .brand-name { font-size: 3.2rem; } }
   </style>
 </head>
 <body>
-  <div class="container">
-    <img class="logo" src="https://img.icons8.com/fluency/96/retro-tv.png" alt="Retromio">
-    <h1>Retromio</h1>
-    <p class="tagline">Vintage cinema, modern streams</p>
-    <div class="card">
-      <p class="desc">
-        AI-generated retro cinema posters — pulp fiction style, vintage Hollywood,
-        dramatic lighting — for every movie &amp; series on TMDB.
-        Streams via Vidlink &amp; NetMirror in up to 1080p.
-      </p>
-      <a class="btn" href="${stremioUrl}">📺 Install to Stremio</a>
-      <a class="btn btn-secondary" href="/poster-status">🎨 Poster Queue Status</a>
-      <hr class="divider">
-      <div class="url-box" onclick="copyUrl(this)" title="Click to copy">${manifestUrl}</div>
-      <div id="copy-msg"></div>
-      <div class="badges">
-        <span class="badge">Vidlink</span>
-        <span class="badge">NetMirror</span>
-        <span class="badge">TMDB</span>
-        <span class="badge ai">✨ AI Posters</span>
-        <span class="badge">1080p</span>
-        <span class="badge">Backblaze B2</span>
+  <div class="bg-img"></div>
+  <div class="bg-overlay"></div>
+  <div class="grain"></div>
+  <div class="wrap">
+    <div class="panel">
+      <div class="brand">
+        <p class="brand-eyebrow">Stremio &amp; Nuvio Addon</p>
+        <h1 class="brand-name">Retro<span>mio</span></h1>
+        <div class="brand-line"></div>
+        <p class="brand-desc">
+          <strong>Nuvio</strong> ve <strong>Stremio</strong> için posterleri yapay zeka aracılığıyla düzenler,
+          <strong>Vidlink</strong> ve <strong>NetMirror</strong> kaynaklarından içerik sunar.
+        </p>
+      </div>
+      <div class="card">
+        <a class="btn btn-primary" id="stremioBtn" href="#">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg>
+          Stremio'ya Yükle
+        </a>
+        <a class="btn btn-secondary" id="nuvioBtn" href="#">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
+          Nuvio'ya Yükle
+        </a>
+        <a class="btn btn-secondary" href="/poster-status">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zm-9-4l-3-3.75L6 15h12l-3.75-5-2.25 3z"/></svg>
+          Poster Kuyruğu
+        </a>
+        <div class="url-section">
+          <p class="url-label">Manifest URL</p>
+          <div class="url-row" id="urlRow">
+            <svg class="copy-svg" viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+            <span class="url-text" id="urlText">—</span>
+          </div>
+          <p class="copied" id="copied">Kopyalandı ✓</p>
+        </div>
       </div>
     </div>
   </div>
   <script>
-    function copyUrl(el) {
-      navigator.clipboard.writeText(el.textContent.trim()).then(() => {
-        document.getElementById("copy-msg").textContent = "✓ Copied to clipboard";
-        setTimeout(() => document.getElementById("copy-msg").textContent = "", 2000);
+    const base = window.location.origin;
+    const manifest = base + '/manifest.json';
+    document.getElementById('urlText').textContent = manifest;
+    document.getElementById('stremioBtn').href = manifest.replace(/^https?:\/\//, 'stremio://');
+    document.getElementById('nuvioBtn').href = 'https://www.nuvio.cc/install?manifest=' + encodeURIComponent(manifest);
+    document.getElementById('urlRow').addEventListener('click', () => {
+      navigator.clipboard.writeText(manifest).then(() => {
+        const el = document.getElementById('copied');
+        el.classList.add('on');
+        setTimeout(() => el.classList.remove('on'), 2000);
       });
-    }
+    });
   </script>
 </body>
 </html>`);
