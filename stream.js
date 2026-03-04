@@ -92,16 +92,36 @@ async function fetchStreams(id, type) {
 
   if (vidlinkResult.status === "fulfilled" && vidlinkResult.value?.length) {
     const filtered = filterStreams(vidlinkResult.value);
-    rawStreams.push(...filtered);
-    console.log(`[Stream] Vidlink: ${filtered.length} streams (from ${vidlinkResult.value.length})`);
+    filtered.forEach(s => {
+      rawStreams.push({
+        name:  s.name  || "Vidlink",
+        title: s.title || "",
+        url:   s.url,
+        behaviorHints: {
+          notWebReady: false,
+          headers: s.headers || {}
+        }
+      });
+    });
+    console.log(`[Stream] Vidlink: ${filtered.length} streams`);
   } else {
     console.log(`[Stream] Vidlink failed: ${vidlinkResult.reason?.message || "no streams"}`);
   }
 
   if (netmirrorResult.status === "fulfilled" && netmirrorResult.value?.length) {
     const filtered = filterStreams(netmirrorResult.value);
-    rawStreams.push(...filtered);
-    console.log(`[Stream] NetMirror: ${filtered.length} streams (from ${netmirrorResult.value.length})`);
+    filtered.forEach(s => {
+      rawStreams.push({
+        name:  s.name  || "NetMirror",
+        title: s.title || "",
+        url:   s.url,
+        behaviorHints: {
+          notWebReady: false,
+          headers: s.headers || {}
+        }
+      });
+    });
+    console.log(`[Stream] NetMirror: ${filtered.length} streams`);
   } else {
     console.log(`[Stream] NetMirror failed: ${netmirrorResult.reason?.message || "no streams"}`);
   }
