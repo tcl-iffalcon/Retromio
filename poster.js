@@ -77,7 +77,9 @@ function processQueue() {
   if (requestQueue.length > 0 && activeRequests < MAX_CONCURRENT) {
     activeRequests++;
     const next = requestQueue.shift();
-    next().finally(() => {
+    next().catch(err => {
+      console.error(`[Queue] Unhandled task error: ${err.message}`);
+    }).finally(() => {
       activeRequests--;
       processQueue();
     });
@@ -99,7 +101,8 @@ async function existsInCloudinary(title, year) {
 async function uploadToCloudinary(title, year, buffer) {
   const publicId  = posterPublicId(title, year);
   const timestamp = Math.floor(Date.now() / 1000).toString();
-  const toSign    = `folder=${CLD_FOLDER}&public_id=${encodeURIComponent(publicId)}&timestamp=${timestamp}${CLD_SECRET}`;
+  // Cloudinary signature: alphabetical order, no encoding, append secret
+  const toSign    = `public_id=${publicId}&timestamp=${timestamp}${CLD_SECRET}`;
   const signature = crypto.createHash("sha256").update(toSign).digest("hex");
 
   // Build multipart form
