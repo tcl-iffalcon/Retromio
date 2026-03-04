@@ -1,14 +1,20 @@
 const fetch = require("node-fetch");
-
 const TMDB_API_KEY = "439c478a771f35c05022f9feabcca01c";
 const TMDB_BASE = "https://api.themoviedb.org/3";
 
-async function fetchMeta(id, type) {
+const POSTER_VERSION = "v12";
+const B2_BUCKET_URL = "https://retromio-posters.s3.us-east-005.backblazeb2.com";
+
+function posterKey(title, year) {
+  const safe = (title || "unknown").replace(/[^a-z0-9]/gi, "_").toLowerCase();
+  return `${POSTER_VERSION}_${safe}_${year || "0"}.jpg`;
+}
+
+async function fetchMeta(id, type, baseUrl) {
   try {
     let tmdbId = null;
     const isMovie = type === "movie";
 
-    // Resolve TMDB ID from IMDb ID or tmdb: prefix
     if (id.startsWith("tt")) {
       const res = await fetch(`${TMDB_BASE}/find/${id}?api_key=${TMDB_API_KEY}&external_source=imdb_id`);
       const data = await res.json();
@@ -32,15 +38,32 @@ async function fetchMeta(id, type) {
     const releaseDate = isMovie ? item.release_date : item.first_air_date;
     const year = releaseDate ? releaseDate.substring(0, 4) : null;
     const genres = item.genres ? item.genres.map(g => g.name) : [];
+    const genreIds = item.genres ? item.genres.map(g => g.id).join(",") : "";
     const cast = item.credits && item.credits.cast
       ? item.credits.cast.slice(0, 5).map(c => c.name)
       : [];
+
+    // Use B2 URL directly, trigger generation in background
+    const key = posterKey(title, year);
+    const b2PosterUrl = `${B2_BUCKET_URL}/${key}`;
+
+    if (baseUrl && title) {
+      const params = new URLSearchParams({
+        title: title || "",
+        year: year || "",
+        type: isMovie ? "movie" : "series",
+        genres: genreIds,
+        overview: (item.overview || "").substring(0, 200),
+        fallback: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : ""
+      });
+      fetch(`${baseUrl}/ai-poster?${params.toString()}`).catch(() => {});
+    }
 
     const meta = {
       id,
       type,
       name: title,
-      poster: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : null,
+      poster: b2PosterUrl,
       background: item.backdrop_path ? `https://image.tmdb.org/t/p/w1280${item.backdrop_path}` : null,
       description: item.overview,
       releaseInfo: year,
@@ -52,7 +75,6 @@ async function fetchMeta(id, type) {
         : null,
     };
 
-    // Add seasons for series
     if (!isMovie && item.seasons) {
       meta.videos = [];
       item.seasons
