@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Retromio</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,600;1,300;1,600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      min-height: 100vh;
+      background: #06060e;
+      font-family: 'DM Sans', sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .bg-img {
+      position: fixed;
+      inset: 0;
+      background-image: url('/kibar-feyzo.jpg');
+      background-size: cover;
+      background-position: center;
+      opacity: 0.13;
+      filter: grayscale(20%);
+      transform: scale(1.04);
+    }
+
+    .bg-overlay {
+      position: fixed;
+      inset: 0;
+      background:
+        linear-gradient(to right, rgba(6,6,14,0.55) 0%, rgba(6,6,14,0.92) 60%, rgba(6,6,14,0.99) 100%),
+        linear-gradient(to bottom, rgba(6,6,14,0.5) 0%, transparent 30%, transparent 70%, rgba(6,6,14,0.8) 100%);
+    }
+
+    .grain {
+      position: fixed;
+      inset: 0;
+      opacity: 0.03;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)'/%3E%3C/svg%3E");
+      pointer-events: none;
+    }
+
+    .wrap {
+      position: relative;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      width: 100%;
+      max-width: 1100px;
+      min-height: 100vh;
+      padding: 3rem;
+    }
+
+    .panel {
+      width: 100%;
+      max-width: 390px;
+      animation: fadeIn 1.2s cubic-bezier(0.16,1,0.3,1) both;
+    }
+
+    .brand { margin-bottom: 2.5rem; }
+
+    .brand-eyebrow {
+      font-size: 0.62rem;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      color: rgba(210,175,95,0.55);
+      margin-bottom: 0.75rem;
+    }
+
+    .brand-name {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 4.2rem;
+      font-weight: 600;
+      color: #f5ede0;
+      line-height: 0.88;
+      letter-spacing: -0.02em;
+    }
+    .brand-name span { font-style: italic; color: #d2af5f; }
+
+    .brand-line {
+      width: 28px;
+      height: 1px;
+      background: rgba(210,175,95,0.35);
+      margin: 1.25rem 0;
+    }
+
+    .brand-desc {
+      font-size: 0.82rem;
+      line-height: 1.75;
+      color: rgba(255,255,255,0.35);
+      font-weight: 300;
+    }
+    .brand-desc strong {
+      color: rgba(255,255,255,0.62);
+      font-weight: 400;
+    }
+
+    .card {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 16px;
+      padding: 1.75rem;
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      box-shadow: 0 0 0 1px rgba(255,255,255,0.02) inset, 0 32px 64px rgba(0,0,0,0.5);
+    }
+
+    .btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.55rem;
+      width: 100%;
+      padding: 0.85rem 1.25rem;
+      border-radius: 10px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.875rem;
+      font-weight: 500;
+      letter-spacing: 0.01em;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.18s ease;
+      border: none;
+      margin-bottom: 0.625rem;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #d2af5f 0%, #a8862a 100%);
+      color: #06060e;
+      box-shadow: 0 2px 16px rgba(210,175,95,0.2);
+    }
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 24px rgba(210,175,95,0.35);
+      filter: brightness(1.08);
+    }
+
+    .btn-secondary {
+      background: rgba(255,255,255,0.04);
+      color: rgba(255,255,255,0.52);
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+    .btn-secondary:hover {
+      background: rgba(255,255,255,0.07);
+      color: rgba(255,255,255,0.78);
+      border-color: rgba(255,255,255,0.13);
+      transform: translateY(-1px);
+    }
+
+    .url-section {
+      margin-top: 1.25rem;
+      padding-top: 1.25rem;
+      border-top: 1px solid rgba(255,255,255,0.05);
+    }
+
+    .url-label {
+      font-size: 0.6rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.18);
+      margin-bottom: 0.5rem;
+    }
+
+    .url-row {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      background: rgba(0,0,0,0.25);
+      border: 1px solid rgba(255,255,255,0.05);
+      border-radius: 8px;
+      padding: 0.65rem 0.875rem;
+      cursor: pointer;
+      transition: border-color 0.15s;
+    }
+    .url-row:hover { border-color: rgba(210,175,95,0.2); }
+    .url-row:hover .copy-svg { opacity: 0.65; }
+
+    .url-text {
+      flex: 1;
+      font-size: 0.64rem;
+      color: rgba(255,255,255,0.22);
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .copy-svg {
+      width: 13px; height: 13px;
+      fill: rgba(255,255,255,0.22);
+      flex-shrink: 0;
+      opacity: 0.38;
+      transition: opacity 0.15s;
+    }
+
+    .copied {
+      font-size: 0.64rem;
+      color: #d2af5f;
+      text-align: right;
+      margin-top: 0.35rem;
+      opacity: 0;
+      transition: opacity 0.25s;
+      height: 0.9rem;
+    }
+    .copied.on { opacity: 1; }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateX(20px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+
+    @media (max-width: 700px) {
+      .wrap { justify-content: center; padding: 1.5rem; min-height: 100svh; }
+      .brand-name { font-size: 3.2rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-img"></div>
+  <div class="bg-overlay"></div>
+  <div class="grain"></div>
+
+  <div class="wrap">
+    <div class="panel">
+      <div class="brand">
+        <p class="brand-eyebrow">Stremio &amp; Nuvio Addon</p>
+        <h1 class="brand-name">Retro<span>mio</span></h1>
+        <div class="brand-line"></div>
+        <p class="brand-desc">
+          <strong>Nuvio</strong> ve <strong>Stremio</strong> için posterleri yapay zeka aracılığıyla düzenler,
+          <strong>Vidlink</strong> ve <strong>NetMirror</strong> kaynaklarından içerik sunar.
+        </p>
+      </div>
+
+      <div class="card">
+        <a class="btn btn-primary" id="stremioBtn" href="#">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg>
+          Stremio'ya Yükle
+        </a>
+        <a class="btn btn-secondary" id="nuvioBtn" href="#">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
+          Nuvio'ya Yükle
+        </a>
+
+        <div class="url-section">
+          <p class="url-label">Manifest URL</p>
+          <div class="url-row" id="urlRow">
+            <svg class="copy-svg" viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+            <span class="url-text" id="urlText">—</span>
+          </div>
+          <p class="copied" id="copied">Kopyalandı ✓</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const base = window.location.origin;
+    const manifest = base + '/manifest.json';
+    document.getElementById('urlText').textContent = manifest;
+    document.getElementById('stremioBtn').href = manifest.replace(/^https?:\/\//, 'stremio://');
+    document.getElementById('nuvioBtn').href = 'https://www.nuvio.cc/install?manifest=' + encodeURIComponent(manifest);
+    document.getElementById('urlRow').addEventListener('click', () => {
+      navigator.clipboard.writeText(manifest).then(() => {
+        const el = document.getElementById('copied');
+        el.classList.add('on');
+        setTimeout(() => el.classList.remove('on'), 2000);
+      });
+    });
+  </script>
+</body>
+</html>

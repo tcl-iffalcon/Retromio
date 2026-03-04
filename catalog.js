@@ -1,51 +1,31 @@
 const fetch = require("node-fetch");
+
 const TMDB_API_KEY = "439c478a771f35c05022f9feabcca01c";
 const TMDB_BASE = "https://api.themoviedb.org/3";
 const TMDB_IMG = "https://image.tmdb.org/t/p/w500";
 
-const POSTER_VERSION = "v12";
-const B2_BUCKET_URL = "https://retromio-posters.s3.us-east-005.backblazeb2.com";
-
-function posterKey(title, year) {
-  const safe = (title || "unknown").replace(/[^a-z0-9]/gi, "_").toLowerCase();
-  return `${POSTER_VERSION}_${safe}_${year || "0"}.jpg`;
+// Retro poster: proxies TMDB image through our /poster endpoint with SVG filter
+function getPosterUrl(baseUrl, tmdbPath, retro) {
+  if (!tmdbPath) return null;
+  const original = `${TMDB_IMG}${tmdbPath}`;
+  if (!retro) return original;
+  // Use our own poster proxy endpoint
+  return `${baseUrl}/poster?img=${encodeURIComponent(original)}`;
 }
 
-function getAiPosterUrl(baseUrl, item, type) {
-  const isMovie = type === "movie";
-  const title = isMovie ? item.title : item.name;
-  const releaseDate = isMovie ? item.release_date : item.first_air_date;
-  const year = releaseDate ? releaseDate.substring(0, 4) : "";
-  const genres = (item.genre_ids || []).slice(0, 3).join(",");
-  const overview = (item.overview || "").substring(0, 200);
-  const key = posterKey(title, year);
-  // Return direct B2 URL — Stremio will show it instantly if cached, else trigger generation via background fetch
-  const b2Url = `${B2_BUCKET_URL}/${key}`;
-  const params = new URLSearchParams({
-    title: title || "",
-    year: year || "",
-    type: isMovie ? "movie" : "series",
-    genres: genres,
-    overview: overview,
-    fallback: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : ""
-  });
-  // Trigger generation in background (fire and forget)
-  fetch(`${baseUrl}/ai-poster?${params.toString()}`).catch(() => {});
-  return b2Url;
-}
-
-function tmdbToStremio(item, type, baseUrl) {
+function tmdbToStremio(item, type, baseUrl, retro) {
   const isMovie = type === "movie";
   const title = isMovie ? item.title : item.name;
   const releaseDate = isMovie ? item.release_date : item.first_air_date;
   const year = releaseDate ? releaseDate.substring(0, 4) : null;
   const imdbId = item.imdb_id || null;
   const id = imdbId || `tmdb:${item.id}`;
+
   return {
     id,
     type: isMovie ? "movie" : "series",
     name: title,
-    poster: getAiPosterUrl(baseUrl, item, type),
+    poster: getPosterUrl(baseUrl, item.poster_path, retro),
     background: item.backdrop_path ? `https://image.tmdb.org/t/p/w1280${item.backdrop_path}` : null,
     description: item.overview,
     releaseInfo: year,
@@ -55,36 +35,27 @@ function tmdbToStremio(item, type, baseUrl) {
   };
 }
 
-async function fetchCatalog(catalogId, type, skip = 0, baseUrl) {
-  const RESULTS_PER_PAGE = 30;
+async function fetchCatalog(catalogId, type, skip = 0, baseUrl, retro) {
+  const page = Math.floor(skip / 20) + 1;
+  let endpoint;
 
-  // TMDB returns 20 per page — 2 pages gives us ~40, slice to 30
-  const tmdbPage = Math.floor(skip / RESULTS_PER_PAGE) * 2 + 1;
-  const tmdbType = type === "series" ? "tv" : "movie";
-  const isTrending = catalogId.includes("trending");
+  if (catalogId.includes("trending")) {
+    endpoint = `${TMDB_BASE}/trending/${type === "series" ? "tv" : "movie"}/week?api_key=${TMDB_API_KEY}&page=${page}`;
+  } else {
+    endpoint = `${TMDB_BASE}/${type === "series" ? "tv" : "movie"}/popular?api_key=${TMDB_API_KEY}&page=${page}`;
+  }
 
-  const pagePromises = [tmdbPage, tmdbPage + 1].map(p => {
-    const endpoint = isTrending
-      ? `${TMDB_BASE}/trending/${tmdbType}/week?api_key=${TMDB_API_KEY}&page=${p}`
-      : `${TMDB_BASE}/${tmdbType}/popular?api_key=${TMDB_API_KEY}&page=${p}`;
-    return fetch(endpoint).then(r => r.json());
-  });
+  console.log(`[Catalog] Fetching: ${endpoint}`);
+  const res = await fetch(endpoint);
+  const data = await res.json();
 
-  const pages = await Promise.all(pagePromises);
-  const allResults = pages.flatMap(data => data.results || []);
+  if (!data.results) return [];
 
-  const metas = allResults
+  const metas = data.results
     .filter(item => item.poster_path)
-    .slice(0, RESULTS_PER_PAGE)
-    .map(item => tmdbToStremio(item, tmdbType, baseUrl));
-
-  console.log(`[Catalog] ${catalogId} skip=${skip} → ${metas.length} results`);
-
-  // NOTE: prewarm removed — it was firing all poster requests at once
-  // and causing Pollinations 530 rate limit errors.
-  // Posters are now generated on-demand when Stremio renders each item.
+    .map(item => tmdbToStremio(item, type === "series" ? "tv" : "movie", baseUrl, retro));
 
   return metas;
 }
 
-module.exports = { fetchCatalog, tmdbToStremio };
+module.exports = { fetchCatalog, tmdbToStremio, getPosterUrl };
