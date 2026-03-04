@@ -97,9 +97,12 @@ async function fetchStreams(id, type) {
         name:  s.name  || "Vidlink",
         title: s.title || "",
         url:   s.url,
+        subtitles: [],
         behaviorHints: {
-          notWebReady: false,
-          headers: s.headers || {}
+          notWebReady:    true,
+          proxyHeaders: {
+            request: s.headers || {}
+          }
         }
       });
     });
@@ -115,9 +118,12 @@ async function fetchStreams(id, type) {
         name:  s.name  || "NetMirror",
         title: s.title || "",
         url:   s.url,
+        subtitles: [],
         behaviorHints: {
-          notWebReady: false,
-          headers: s.headers || {}
+          notWebReady:    true,
+          proxyHeaders: {
+            request: s.headers || {}
+          }
         }
       });
     });
