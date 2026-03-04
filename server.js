@@ -77,7 +77,7 @@ app.get("/configure", (req, res) => {
     .bg-photo {
       position: absolute; inset: 0;
       background: url('/kibar-feyzo.jpg') center/cover no-repeat;
-      opacity: 0.92;
+      opacity: 0.97;
       filter: grayscale(5%);
       transform: scale(1.06);
       transition: opacity 1s;
