@@ -2,7 +2,7 @@
   "id": "com.retromio.addon",
   "version": "1.0.0",
   "name": "Retromio",
-  "description": "Nuvio ve Stremio için posterleri yapay zeka aracılığıyla düzenler, Vidlink ve NetMirror kaynaklarından içerik sunar",
+  "description": "Retro-styled movie & series catalog with Vidlink and NetMirror streams",
   "logo": "https://img.icons8.com/fluency/96/retro-tv.png",
   "background": "https://img.icons8.com/fluency/512/retro-tv.png",
   "resources": ["catalog", "meta", "stream"],
